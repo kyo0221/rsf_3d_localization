@@ -26,56 +26,6 @@
           "description": "Robot base frame.",
           "default": "base_footprint"
         },
-        "map_resolution": {
-          "type": "number",
-          "description": "NDT voxel size [m].",
-          "default": 1.0
-        },
-        "ndt_coarse_resolution": {
-          "type": "number",
-          "description": "Voxel size of the coarse NDT stage [m].",
-          "default": 2.0
-        },
-        "map_min_points": {
-          "type": "integer",
-          "description": "Minimum points in an NDT voxel.",
-          "default": 6
-        },
-        "map_eigen_ratio": {
-          "type": "number",
-          "description": "Minimum eigenvalue ratio of an NDT voxel covariance.",
-          "default": 0.01
-        },
-        "ndt_max_iterations": {
-          "type": "integer",
-          "description": "Maximum NDT iterations per stage.",
-          "default": 30
-        },
-        "ndt_epsilon": {
-          "type": "number",
-          "description": "NDT convergence threshold on the step.",
-          "default": 0.001
-        },
-        "grid_resolution": {
-          "type": "number",
-          "description": "Cell size of the 2D likelihood grid for the global search [m].",
-          "default": 0.25
-        },
-        "grid_band_min": {
-          "type": "number",
-          "description": "Lowest height above ground used in the 2D grid [m].",
-          "default": 0.5
-        },
-        "grid_band_max": {
-          "type": "number",
-          "description": "Highest height above ground used in the 2D grid [m].",
-          "default": 3.0
-        },
-        "grid_sigma": {
-          "type": "number",
-          "description": "Distance scale of the 2D likelihood [m].",
-          "default": 0.3
-        },
         "initial_pose_x": {
           "type": "number",
           "description": "Initial x [m].",
@@ -111,6 +61,24 @@
           "description": "Scan accumulation time [s].",
           "default": 1.0
         },
+        "field_resolution": {
+          "type": "number",
+          "description": "Cell size of the 3D distance field [m].",
+          "default": 0.2,
+          "minimum": 0.01
+        },
+        "field_max_distance": {
+          "type": "number",
+          "description": "Distance at which the 3D distance field is truncated [m].",
+          "default": 1.0,
+          "minimum": 0.01
+        },
+        "field_threads": {
+          "type": "integer",
+          "description": "Threads used to build the distance field.",
+          "default": 8,
+          "minimum": 1
+        },
         "map_visualization_voxel_size": {
           "type": "number",
           "description": "Voxel size of the point cloud map published for visualization [m].",
@@ -143,17 +111,24 @@
         },
         "alpha_threshold": {
           "type": "number",
-          "description": "Minimum mean NDT score per point to use a match.",
-          "default": 0.2
+          "description": "Minimum mean point likelihood at the estimate to update the ESKF.",
+          "default": 0.3
         },
-        "ndt_gate": {
+        "pose_gate": {
           "type": "number",
-          "description": "Mahalanobis gate of a scan match.",
-          "default": 40.0
+          "description": "NIS gate for the particle pose update of the ESKF.",
+          "default": 40.0,
+          "minimum": 0.0
         },
-        "ndt_sigma": {
+        "information_min_gain": {
+          "type": "number",
+          "description": "Minimum relative information a particle update must add on an axis to be passed to the ESKF.",
+          "default": 0.05,
+          "minimum": 0.0
+        },
+        "pose_sigma_floor": {
           "type": "array",
-          "description": "Standard deviations of a scan match (x, y, z [m], roll, pitch, yaw [rad]).",
+          "description": "Lower bound of the particle pose standard deviations (x, y, z [m], roll, pitch, yaw [rad]).",
           "default": [
             0.1,
             0.1,
@@ -166,30 +141,182 @@
             "type": "number"
           }
         },
-        "search_radius": {
-          "type": "number",
-          "description": "Minimum radius of the global search [m].",
-          "default": 10.0
+        "particle_count": {
+          "type": "integer",
+          "description": "Number of particles.",
+          "default": 1000,
+          "minimum": 1
         },
-        "search_yaw": {
-          "type": "number",
-          "description": "Yaw range of the global search [rad].",
-          "default": 0.35
+        "particle_threads": {
+          "type": "integer",
+          "description": "Threads used to weight particles.",
+          "default": 4,
+          "minimum": 1
         },
-        "search_step": {
-          "type": "number",
-          "description": "Position step of the global search [m].",
-          "default": 0.5
+        "initial_spread": {
+          "type": "array",
+          "description": "Particle spread at initialization (xy [m], z [m], roll and pitch [rad], yaw [rad]).",
+          "default": [
+            0.5,
+            0.1,
+            0.01,
+            0.05
+          ],
+          "items": {
+            "type": "number"
+          }
         },
-        "search_yaw_step": {
+        "motion_along": {
           "type": "number",
-          "description": "Yaw step of the global search [rad].",
-          "default": 0.035
+          "description": "Along-track motion noise per travelled metre.",
+          "default": 0.1,
+          "minimum": 0.0
         },
-        "search_ratio": {
+        "motion_along_time": {
           "type": "number",
-          "description": "Score ratio by which the best search peak must beat the runner-up.",
-          "default": 1.05
+          "description": "Along-track motion noise per second [m/s].",
+          "default": 0.4,
+          "minimum": 0.0
+        },
+        "motion_lateral": {
+          "type": "number",
+          "description": "Lateral motion noise per travelled metre.",
+          "default": 0.05,
+          "minimum": 0.0
+        },
+        "motion_vertical": {
+          "type": "number",
+          "description": "Vertical motion noise per travelled metre.",
+          "default": 0.05,
+          "minimum": 0.0
+        },
+        "motion_yaw_per_d": {
+          "type": "number",
+          "description": "Yaw motion noise per travelled metre [rad/m].",
+          "default": 0.02,
+          "minimum": 0.0
+        },
+        "motion_yaw_per_a": {
+          "type": "number",
+          "description": "Yaw motion noise per turned radian.",
+          "default": 0.05,
+          "minimum": 0.0
+        },
+        "motion_tilt": {
+          "type": "number",
+          "description": "Roll and pitch noise per update [rad].",
+          "default": 0.003,
+          "minimum": 0.0
+        },
+        "motion_xy_floor": {
+          "type": "number",
+          "description": "Minimum horizontal motion noise per update [m].",
+          "default": 0.02,
+          "minimum": 0.0
+        },
+        "motion_yaw_floor": {
+          "type": "number",
+          "description": "Minimum yaw motion noise per update [rad].",
+          "default": 0.005,
+          "minimum": 0.0
+        },
+        "scan_sigma": {
+          "type": "number",
+          "description": "Standard deviation of the point to map distance [m].",
+          "default": 0.2,
+          "minimum": 0.01
+        },
+        "scan_random_ratio": {
+          "type": "number",
+          "description": "Weight of the uniform term of the point likelihood.",
+          "default": 0.1,
+          "minimum": 0.0
+        },
+        "scan_effective_points": {
+          "type": "number",
+          "description": "Number of independent points a scan counts as.",
+          "default": 30.0,
+          "minimum": 0.0
+        },
+        "resample_ratio": {
+          "type": "number",
+          "description": "Resample when the effective sample size falls below this ratio of the particle count.",
+          "default": 0.5,
+          "minimum": 0.0
+        },
+        "cluster_radius": {
+          "type": "number",
+          "description": "Radius of the particle cluster used as the estimate [m].",
+          "default": 1.0,
+          "minimum": 0.01
+        },
+        "mass_threshold": {
+          "type": "number",
+          "description": "Minimum weight of the main cluster to update the ESKF.",
+          "default": 0.6,
+          "minimum": 0.0
+        },
+        "fix_reset_radius": {
+          "type": "number",
+          "description": "Radius around an RTK fix used to check the particles [m].",
+          "default": 1.0,
+          "minimum": 0.0
+        },
+        "fix_reset_mass": {
+          "type": "number",
+          "description": "Particle weight near the fix below which the fix counts as a miss.",
+          "default": 0.05,
+          "minimum": 0.0
+        },
+        "fix_reset_count": {
+          "type": "integer",
+          "description": "Consecutive fix misses before particles are added at the fix.",
+          "default": 2,
+          "minimum": 1
+        },
+        "fix_reset_ratio": {
+          "type": "number",
+          "description": "Ratio of particles replaced at the fix.",
+          "default": 0.3,
+          "minimum": 0.0
+        },
+        "fix_reset_spread": {
+          "type": "array",
+          "description": "Spread of particles added at the fix (xy [m], z [m], roll and pitch [rad], yaw [rad]).",
+          "default": [
+            0.3,
+            0.1,
+            0.01,
+            0.05
+          ],
+          "items": {
+            "type": "number"
+          }
+        },
+        "expand_count": {
+          "type": "integer",
+          "description": "Consecutive low map agreements before particles are spread.",
+          "default": 5,
+          "minimum": 1
+        },
+        "expand_ratio": {
+          "type": "number",
+          "description": "Ratio of particles replaced when spreading.",
+          "default": 0.5,
+          "minimum": 0.0
+        },
+        "expand_spread": {
+          "type": "array",
+          "description": "Spread of particles added around the ESKF pose (xy [m], z [m], roll and pitch [rad], yaw [rad]).",
+          "default": [
+            1.0,
+            0.2,
+            0.02,
+            0.15
+          ],
+          "items": {
+            "type": "number"
+          }
         },
         "imu_rotation": {
           "type": "array",
@@ -343,6 +470,47 @@
           "description": "Mahalanobis gate of a fix.",
           "default": 30.0
         },
+        "particle_fix_sigma_xy": {
+          "type": "number",
+          "description": "Horizontal standard deviation of an RTK fix for particle weights [m].",
+          "default": 0.15,
+          "minimum": 0.001
+        },
+        "particle_fix_sigma_z": {
+          "type": "number",
+          "description": "Vertical standard deviation of an RTK fix for particle weights [m].",
+          "default": 0.3,
+          "minimum": 0.001
+        },
+        "particle_fix_outlier": {
+          "type": "number",
+          "description": "Outlier ratio of an RTK fix for particle weights.",
+          "default": 0.02,
+          "minimum": 0.0
+        },
+        "use_float": {
+          "type": "boolean",
+          "description": "Weight particles with non-fix GNSS solutions.",
+          "default": true
+        },
+        "particle_float_sigma_xy": {
+          "type": "number",
+          "description": "Horizontal standard deviation of a non-fix GNSS solution [m].",
+          "default": 3.0,
+          "minimum": 0.001
+        },
+        "particle_float_sigma_z": {
+          "type": "number",
+          "description": "Vertical standard deviation of a non-fix GNSS solution [m].",
+          "default": 10.0,
+          "minimum": 0.001
+        },
+        "particle_float_outlier": {
+          "type": "number",
+          "description": "Outlier ratio of a non-fix GNSS solution.",
+          "default": 0.3,
+          "minimum": 0.0
+        },
         "output_rate_d": {
           "type": "number",
           "description": "Maximum correction speed of the published pose [m/s].",
@@ -421,7 +589,7 @@
         "imu_wait": {
           "type": "number",
           "description": "Time a scan waits for the IMU to catch up before it is processed anyway [s].",
-          "default": 0.2
+          "default": 1.0
         }
       },
       "required": [
@@ -429,16 +597,6 @@
         "map_frame",
         "odom_frame",
         "base_frame",
-        "map_resolution",
-        "ndt_coarse_resolution",
-        "map_min_points",
-        "map_eigen_ratio",
-        "ndt_max_iterations",
-        "ndt_epsilon",
-        "grid_resolution",
-        "grid_band_min",
-        "grid_band_max",
-        "grid_sigma",
         "initial_pose_x",
         "initial_pose_y",
         "initial_pose_z",
@@ -446,6 +604,9 @@
         "range_min",
         "range_max",
         "scan_accumulate_s",
+        "field_resolution",
+        "field_max_distance",
+        "field_threads",
         "map_visualization_voxel_size",
         "scan_voxel_size",
         "max_points",
@@ -453,13 +614,35 @@
         "update_min_a",
         "update_max_dt",
         "alpha_threshold",
-        "ndt_gate",
-        "ndt_sigma",
-        "search_radius",
-        "search_yaw",
-        "search_step",
-        "search_yaw_step",
-        "search_ratio",
+        "pose_gate",
+        "information_min_gain",
+        "pose_sigma_floor",
+        "particle_count",
+        "particle_threads",
+        "initial_spread",
+        "motion_along",
+        "motion_along_time",
+        "motion_lateral",
+        "motion_vertical",
+        "motion_yaw_per_d",
+        "motion_yaw_per_a",
+        "motion_tilt",
+        "motion_xy_floor",
+        "motion_yaw_floor",
+        "scan_sigma",
+        "scan_random_ratio",
+        "scan_effective_points",
+        "resample_ratio",
+        "cluster_radius",
+        "mass_threshold",
+        "fix_reset_radius",
+        "fix_reset_mass",
+        "fix_reset_count",
+        "fix_reset_ratio",
+        "fix_reset_spread",
+        "expand_count",
+        "expand_ratio",
+        "expand_spread",
         "imu_rotation",
         "imu_decimation",
         "sigma_acc",
@@ -485,6 +668,13 @@
         "gnss_sigma_xy",
         "gnss_sigma_z",
         "gnss_gate",
+        "particle_fix_sigma_xy",
+        "particle_fix_sigma_z",
+        "particle_fix_outlier",
+        "use_float",
+        "particle_float_sigma_xy",
+        "particle_float_sigma_z",
+        "particle_float_outlier",
         "output_rate_d",
         "output_rate_a",
         "output_grade",

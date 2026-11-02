@@ -39,10 +39,10 @@ public:
 
   void reset(const Transform& pose, double speed);
   void predict(const Eigen::Vector3d& gyro, const Eigen::Vector3d& acc, double dt, const EskfNoise& noise);
-  double update_forward_speed(double speed, double sigma, double gate);
+  double update_forward_speed(double speed, double sigma, double gate, bool inflate);
   void update_lateral_constraint(double sigma);
-  double update_position(const Eigen::Vector3d& measured, const Eigen::Vector3d& lever, double sigma_xy,
-                         double sigma_z, double gate, bool inflate);
+  double update_position(const Eigen::Vector3d& measured, const Eigen::Vector3d& lever, double sigma_xy, double sigma_z,
+                         double gate, bool inflate);
   double update_pose(const Transform& measured, const Eigen::Matrix<double, 6, 1>& sigma, double gate, bool inflate);
 
   Transform pose() const;

@@ -130,7 +130,7 @@ double Eskf::correct(const Eigen::Matrix<double, M, kDim>& h, const Eigen::Matri
   return -nis;
 }
 
-double Eskf::update_forward_speed(double speed, double sigma, double gate)
+double Eskf::update_forward_speed(double speed, double sigma, double gate, bool inflate)
 {
   Eigen::Matrix<double, 1, kDim> h = Eigen::Matrix<double, 1, kDim>::Zero();
   Vector3d body = r_.transpose() * v_;
@@ -140,7 +140,7 @@ double Eskf::update_forward_speed(double speed, double sigma, double gate)
   Eigen::Matrix<double, 1, 1> residual, noise;
   residual << speed - odom_scale_ * body.x();
   noise << sigma * sigma;
-  return correct<1>(h, residual, noise, gate, false);
+  return correct<1>(h, residual, noise, gate, inflate);
 }
 
 void Eskf::update_lateral_constraint(double sigma)
@@ -168,8 +168,7 @@ double Eskf::update_position(const Vector3d& measured, const Vector3d& lever, do
   return correct<3>(h, residual, noise, gate, inflate);
 }
 
-double Eskf::update_pose(const Transform& measured, const Eigen::Matrix<double, 6, 1>& sigma, double gate,
-                         bool inflate)
+double Eskf::update_pose(const Transform& measured, const Eigen::Matrix<double, 6, 1>& sigma, double gate, bool inflate)
 {
   Eigen::Matrix<double, 6, kDim> h = Eigen::Matrix<double, 6, kDim>::Zero();
   h.block<3, 3>(0, 0) = Matrix3d::Identity();

@@ -16,15 +16,16 @@ find_package(Eigen3 REQUIRED)
 
 add_library(${PROJECT_NAME}_core SHARED
   src/eskf.cpp
-  src/likelihood_grid.cpp
-  src/ndt_map.cpp
+  src/likelihood_field.cpp
+  src/particle_filter.cpp
   src/pcd_io.cpp
 )
 target_include_directories(${PROJECT_NAME}_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
 )
-target_link_libraries(${PROJECT_NAME}_core Eigen3::Eigen)
+find_package(Threads REQUIRED)
+target_link_libraries(${PROJECT_NAME}_core Eigen3::Eigen Threads::Threads)
 target_compile_features(${PROJECT_NAME}_core PUBLIC cxx_std_17)
 
 ament_auto_add_library(${PROJECT_NAME} SHARED
@@ -55,9 +56,9 @@ if(BUILD_TESTING)
   ament_add_gtest(test_${PROJECT_NAME}
     test/test_pose_math.cpp
     test/test_pcd_io.cpp
-    test/test_ndt_map.cpp
     test/test_eskf.cpp
-    test/test_likelihood_grid.cpp
+    test/test_likelihood_field.cpp
+    test/test_particle_filter.cpp
   )
   target_link_libraries(test_${PROJECT_NAME} ${PROJECT_NAME}_core)
 endif()
