@@ -1,0 +1,506 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Parameters for rsf_3d_localization",
+  "type": "object",
+  "definitions": {
+    "rsf_3d_localization": {
+      "type": "object",
+      "properties": {
+        "map_path": {
+          "type": "string",
+          "description": "Point cloud map file (PCD).",
+          "default": ""
+        },
+        "map_frame": {
+          "type": "string",
+          "description": "Map frame.",
+          "default": "map"
+        },
+        "odom_frame": {
+          "type": "string",
+          "description": "Odometry frame.",
+          "default": "odom"
+        },
+        "base_frame": {
+          "type": "string",
+          "description": "Robot base frame.",
+          "default": "base_footprint"
+        },
+        "map_resolution": {
+          "type": "number",
+          "description": "NDT voxel size [m].",
+          "default": 1.0
+        },
+        "ndt_coarse_resolution": {
+          "type": "number",
+          "description": "Voxel size of the coarse NDT stage [m].",
+          "default": 2.0
+        },
+        "map_min_points": {
+          "type": "integer",
+          "description": "Minimum points in an NDT voxel.",
+          "default": 6
+        },
+        "map_eigen_ratio": {
+          "type": "number",
+          "description": "Minimum eigenvalue ratio of an NDT voxel covariance.",
+          "default": 0.01
+        },
+        "ndt_max_iterations": {
+          "type": "integer",
+          "description": "Maximum NDT iterations per stage.",
+          "default": 30
+        },
+        "ndt_epsilon": {
+          "type": "number",
+          "description": "NDT convergence threshold on the step.",
+          "default": 0.001
+        },
+        "grid_resolution": {
+          "type": "number",
+          "description": "Cell size of the 2D likelihood grid for the global search [m].",
+          "default": 0.25
+        },
+        "grid_band_min": {
+          "type": "number",
+          "description": "Lowest height above ground used in the 2D grid [m].",
+          "default": 0.5
+        },
+        "grid_band_max": {
+          "type": "number",
+          "description": "Highest height above ground used in the 2D grid [m].",
+          "default": 3.0
+        },
+        "grid_sigma": {
+          "type": "number",
+          "description": "Distance scale of the 2D likelihood [m].",
+          "default": 0.3
+        },
+        "initial_pose_x": {
+          "type": "number",
+          "description": "Initial x [m].",
+          "default": 0.0
+        },
+        "initial_pose_y": {
+          "type": "number",
+          "description": "Initial y [m].",
+          "default": 0.0
+        },
+        "initial_pose_z": {
+          "type": "number",
+          "description": "Initial z [m], 0 takes the map ground.",
+          "default": 0.0
+        },
+        "initial_pose_yaw": {
+          "type": "number",
+          "description": "Initial yaw [rad].",
+          "default": 0.0
+        },
+        "range_min": {
+          "type": "number",
+          "description": "Minimum scan range [m].",
+          "default": 1.0
+        },
+        "range_max": {
+          "type": "number",
+          "description": "Maximum scan range [m].",
+          "default": 40.0
+        },
+        "scan_accumulate_s": {
+          "type": "number",
+          "description": "Scan accumulation time [s].",
+          "default": 1.0
+        },
+        "scan_voxel_size": {
+          "type": "number",
+          "description": "Scan downsampling voxel size [m].",
+          "default": 0.5
+        },
+        "max_points": {
+          "type": "integer",
+          "description": "Maximum scan points used for matching.",
+          "default": 300
+        },
+        "update_min_d": {
+          "type": "number",
+          "description": "Travel between scan updates [m].",
+          "default": 0.25
+        },
+        "update_min_a": {
+          "type": "number",
+          "description": "Rotation between scan updates [rad].",
+          "default": 0.2
+        },
+        "update_max_dt": {
+          "type": "number",
+          "description": "Maximum time between scan updates [s].",
+          "default": 1.0
+        },
+        "alpha_threshold": {
+          "type": "number",
+          "description": "Minimum mean NDT score per point to use a match.",
+          "default": 0.2
+        },
+        "ndt_gate": {
+          "type": "number",
+          "description": "Mahalanobis gate of a scan match.",
+          "default": 40.0
+        },
+        "ndt_sigma": {
+          "type": "array",
+          "description": "Standard deviations of a scan match (x, y, z [m], roll, pitch, yaw [rad]).",
+          "default": [
+            0.1,
+            0.1,
+            0.1,
+            0.01,
+            0.01,
+            0.01
+          ],
+          "items": {
+            "type": "number"
+          }
+        },
+        "search_radius": {
+          "type": "number",
+          "description": "Minimum radius of the global search [m].",
+          "default": 10.0
+        },
+        "search_yaw": {
+          "type": "number",
+          "description": "Yaw range of the global search [rad].",
+          "default": 0.35
+        },
+        "search_step": {
+          "type": "number",
+          "description": "Position step of the global search [m].",
+          "default": 0.5
+        },
+        "search_yaw_step": {
+          "type": "number",
+          "description": "Yaw step of the global search [rad].",
+          "default": 0.035
+        },
+        "search_ratio": {
+          "type": "number",
+          "description": "Score ratio by which the best search peak must beat the runner-up.",
+          "default": 1.05
+        },
+        "imu_rotation": {
+          "type": "array",
+          "description": "Row-major rotation from the IMU frame to the base frame.",
+          "default": [
+            0.0,
+            0.0,
+            1.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "items": {
+            "type": "number"
+          }
+        },
+        "imu_decimation": {
+          "type": "integer",
+          "description": "IMU samples averaged per prediction.",
+          "default": 5
+        },
+        "sigma_acc": {
+          "type": "number",
+          "description": "Accelerometer noise [m/s^2/sqrt(Hz)].",
+          "default": 0.3
+        },
+        "sigma_gyro": {
+          "type": "number",
+          "description": "Gyro noise [rad/s/sqrt(Hz)].",
+          "default": 0.01
+        },
+        "sigma_acc_bias": {
+          "type": "number",
+          "description": "Accelerometer bias random walk.",
+          "default": 0.001
+        },
+        "sigma_gyro_bias": {
+          "type": "number",
+          "description": "Gyro bias random walk.",
+          "default": 0.0001
+        },
+        "sigma_odom_scale": {
+          "type": "number",
+          "description": "Odometry speed scale random walk.",
+          "default": 0.002
+        },
+        "lateral_sigma": {
+          "type": "number",
+          "description": "Standard deviation of the zero lateral and vertical body velocity constraint [m/s].",
+          "default": 0.7
+        },
+        "odom_speed_period": {
+          "type": "number",
+          "description": "Interval between odometry speed updates [s].",
+          "default": 0.5
+        },
+        "odom_speed_window": {
+          "type": "number",
+          "description": "Time window of the odometry speed difference [s].",
+          "default": 0.5
+        },
+        "odom_speed_sigma": {
+          "type": "number",
+          "description": "Standard deviation of the odometry speed [m/s].",
+          "default": 0.8
+        },
+        "odom_speed_gate": {
+          "type": "number",
+          "description": "Mahalanobis gate of the odometry speed.",
+          "default": 9.0
+        },
+        "odom_max_speed": {
+          "type": "number",
+          "description": "Odometry speeds above this are ignored [m/s].",
+          "default": 2.2
+        },
+        "odom_max_lateral_speed": {
+          "type": "number",
+          "description": "Odometry steps with more lateral speed are ignored [m/s].",
+          "default": 0.3
+        },
+        "restart_stop_s": {
+          "type": "number",
+          "description": "Stop duration after which a restart is detected [s].",
+          "default": 2.0
+        },
+        "restart_hold_s": {
+          "type": "number",
+          "description": "Time after a restart during which the odometry speed is ignored [s].",
+          "default": 5.0
+        },
+        "gnss_origin_lat": {
+          "type": "number",
+          "description": "Latitude of the map georeference origin [deg].",
+          "default": 36.082628231
+        },
+        "gnss_origin_lon": {
+          "type": "number",
+          "description": "Longitude of the map georeference origin [deg].",
+          "default": 140.076144739
+        },
+        "gnss_offset": {
+          "type": "array",
+          "description": "Offset added to local east, north and altitude to get the map base position [m].",
+          "default": [
+            -36.1765,
+            -27.9854,
+            -41.1224
+          ],
+          "items": {
+            "type": "number"
+          }
+        },
+        "gnss_lever": {
+          "type": "array",
+          "description": "Antenna position in the base frame [m].",
+          "default": [
+            -0.1061,
+            0.1254,
+            0.0
+          ],
+          "items": {
+            "type": "number"
+          }
+        },
+        "gnss_time_offset": {
+          "type": "number",
+          "description": "Delay of the GNSS stamp [s].",
+          "default": 0.1
+        },
+        "gnss_max_variance": {
+          "type": "number",
+          "description": "Fixes with a larger horizontal variance are ignored [m^2].",
+          "default": 0.001
+        },
+        "gnss_sigma_xy": {
+          "type": "number",
+          "description": "Horizontal standard deviation of a fix [m].",
+          "default": 0.05
+        },
+        "gnss_sigma_z": {
+          "type": "number",
+          "description": "Vertical standard deviation of a fix [m].",
+          "default": 0.15
+        },
+        "gnss_gate": {
+          "type": "number",
+          "description": "Mahalanobis gate of a fix.",
+          "default": 30.0
+        },
+        "output_rate_d": {
+          "type": "number",
+          "description": "Maximum correction speed of the published pose [m/s].",
+          "default": 1.0
+        },
+        "output_rate_a": {
+          "type": "number",
+          "description": "Maximum yaw correction speed of the published pose [rad/s].",
+          "default": 0.25
+        },
+        "output_grade": {
+          "type": "number",
+          "description": "Maximum height change of the published pose per travel [m/m].",
+          "default": 0.1
+        },
+        "output_pose_covariance": {
+          "type": "array",
+          "description": "Covariance of the published pose.",
+          "default": [
+            0.04,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.04,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.01,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0003,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0003,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.001
+          ],
+          "items": {
+            "type": "number"
+          }
+        },
+        "transform_tolerance": {
+          "type": "number",
+          "description": "Future dating of the published transform [s].",
+          "default": 0.2
+        },
+        "tf_timeout": {
+          "type": "number",
+          "description": "Wait time for the odom to base transform [s].",
+          "default": 0.1
+        },
+        "imu_wait": {
+          "type": "number",
+          "description": "Time a scan waits for the IMU to catch up before it is processed anyway [s].",
+          "default": 0.2
+        }
+      },
+      "required": [
+        "map_path",
+        "map_frame",
+        "odom_frame",
+        "base_frame",
+        "map_resolution",
+        "ndt_coarse_resolution",
+        "map_min_points",
+        "map_eigen_ratio",
+        "ndt_max_iterations",
+        "ndt_epsilon",
+        "grid_resolution",
+        "grid_band_min",
+        "grid_band_max",
+        "grid_sigma",
+        "initial_pose_x",
+        "initial_pose_y",
+        "initial_pose_z",
+        "initial_pose_yaw",
+        "range_min",
+        "range_max",
+        "scan_accumulate_s",
+        "scan_voxel_size",
+        "max_points",
+        "update_min_d",
+        "update_min_a",
+        "update_max_dt",
+        "alpha_threshold",
+        "ndt_gate",
+        "ndt_sigma",
+        "search_radius",
+        "search_yaw",
+        "search_step",
+        "search_yaw_step",
+        "search_ratio",
+        "imu_rotation",
+        "imu_decimation",
+        "sigma_acc",
+        "sigma_gyro",
+        "sigma_acc_bias",
+        "sigma_gyro_bias",
+        "sigma_odom_scale",
+        "lateral_sigma",
+        "odom_speed_period",
+        "odom_speed_window",
+        "odom_speed_sigma",
+        "odom_speed_gate",
+        "odom_max_speed",
+        "odom_max_lateral_speed",
+        "restart_stop_s",
+        "restart_hold_s",
+        "gnss_origin_lat",
+        "gnss_origin_lon",
+        "gnss_offset",
+        "gnss_lever",
+        "gnss_time_offset",
+        "gnss_max_variance",
+        "gnss_sigma_xy",
+        "gnss_sigma_z",
+        "gnss_gate",
+        "output_rate_d",
+        "output_rate_a",
+        "output_grade",
+        "output_pose_covariance",
+        "transform_tolerance",
+        "tf_timeout",
+        "imu_wait"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "/**": {
+      "type": "object",
+      "properties": {
+        "ros__parameters": {
+          "$ref": "#/definitions/rsf_3d_localization"
+        }
+      },
+      "required": [
+        "ros__parameters"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "/**"
+  ],
+  "additionalProperties": false
+}

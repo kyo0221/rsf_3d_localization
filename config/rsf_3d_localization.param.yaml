@@ -1,0 +1,73 @@
+/**:
+  ros__parameters:
+    map_path: ""
+    map_frame: map
+    odom_frame: odom
+    base_frame: base_footprint
+    map_resolution: 1.0
+    ndt_coarse_resolution: 2.0
+    map_min_points: 6
+    map_eigen_ratio: 0.01
+    ndt_max_iterations: 30
+    ndt_epsilon: 0.001
+    grid_resolution: 0.25
+    grid_band_min: 0.5
+    grid_band_max: 3.0
+    grid_sigma: 0.3
+    initial_pose_x: 0.0
+    initial_pose_y: 0.0
+    initial_pose_z: 0.0
+    initial_pose_yaw: 0.0
+    range_min: 1.0
+    range_max: 40.0
+    scan_accumulate_s: 1.0
+    scan_voxel_size: 0.5
+    max_points: 300
+    update_min_d: 0.25
+    update_min_a: 0.2
+    update_max_dt: 1.0
+    alpha_threshold: 0.2
+    ndt_gate: 40.0
+    ndt_sigma: [0.1, 0.1, 0.1, 0.01, 0.01, 0.01]
+    search_radius: 10.0
+    search_yaw: 0.35
+    search_step: 0.5
+    search_yaw_step: 0.035
+    search_ratio: 1.05
+    imu_rotation: [0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+    imu_decimation: 5
+    sigma_acc: 0.3
+    sigma_gyro: 0.01
+    sigma_acc_bias: 0.001
+    sigma_gyro_bias: 0.0001
+    sigma_odom_scale: 0.002
+    lateral_sigma: 0.7
+    odom_speed_period: 0.5
+    odom_speed_window: 0.5
+    odom_speed_sigma: 0.8
+    odom_speed_gate: 9.0
+    odom_max_speed: 2.2
+    odom_max_lateral_speed: 0.3
+    restart_stop_s: 2.0
+    restart_hold_s: 5.0
+    gnss_origin_lat: 36.082628231
+    gnss_origin_lon: 140.076144739
+    gnss_offset: [-36.1765, -27.9854, -41.1224]
+    gnss_lever: [-0.1061, 0.1254, 0.0]
+    gnss_time_offset: 0.1
+    gnss_max_variance: 0.001
+    gnss_sigma_xy: 0.05
+    gnss_sigma_z: 0.15
+    gnss_gate: 30.0
+    output_rate_d: 1.0
+    output_rate_a: 0.25
+    output_grade: 0.1
+    output_pose_covariance: [0.04, 0.0, 0.0, 0.0, 0.0, 0.0,
+                             0.0, 0.04, 0.0, 0.0, 0.0, 0.0,
+                             0.0, 0.0, 0.01, 0.0, 0.0, 0.0,
+                             0.0, 0.0, 0.0, 0.0003, 0.0, 0.0,
+                             0.0, 0.0, 0.0, 0.0, 0.0003, 0.0,
+                             0.0, 0.0, 0.0, 0.0, 0.0, 0.001]
+    transform_tolerance: 0.2
+    tf_timeout: 0.1
+    imu_wait: 0.2
