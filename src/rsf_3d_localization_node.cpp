@@ -125,6 +125,7 @@ void Rsf3dLocalization::init_map_param()
   params_.output_pose_covariance.fill(0.0);
   std::copy_n(covariance.begin(), std::min<size_t>(covariance.size(), 36), params_.output_pose_covariance.begin());
   params_.transform_tolerance = this->declare_parameter<double>("transform_tolerance");
+  params_.publish_tf = this->declare_parameter<bool>("publish_tf");
   params_.tf_timeout = this->declare_parameter<double>("tf_timeout");
   params_.imu_wait = this->declare_parameter<double>("imu_wait");
 }
@@ -231,12 +232,27 @@ void Rsf3dLocalization::publish_map(const std::vector<Point3f>& points)
 {
   float inv_size = static_cast<float>(1.0 / params_.map_visualization_voxel_size);
   std::unordered_map<int64_t, std::array<float, 4>, VoxelKeyHash> cells;
+  std::unordered_map<int64_t, float, VoxelKeyHash> lowest;
   for (const auto& p : points)
   {
     auto& c = cells[voxel_key(static_cast<int64_t>(std::floor(p.x * inv_size)),
                               static_cast<int64_t>(std::floor(p.y * inv_size)),
                               static_cast<int64_t>(std::floor(p.z * inv_size)))];
     c[0] += p.x, c[1] += p.y, c[2] += p.z, c[3] += 1.0f;
+    int64_t column = voxel_key(static_cast<int64_t>(std::floor(p.x * 0.2f)), static_cast<int64_t>(std::floor(p.y * 0.2f)), 0);
+    auto [it, inserted] = lowest.try_emplace(column, p.z);
+    if (!inserted)
+      it->second = std::min(it->second, p.z);
+  }
+  std::vector<float> floors;
+  floors.reserve(lowest.size());
+  for (const auto& [key, z] : lowest)
+    floors.push_back(z);
+  float ground = 0.0f;
+  if (!floors.empty())
+  {
+    std::nth_element(floors.begin(), floors.begin() + floors.size() / 2, floors.end());
+    ground = floors[floors.size() / 2];
   }
   sensor_msgs::msg::PointCloud2 msg;
   msg.header.frame_id = params_.map_frame;
@@ -249,11 +265,11 @@ void Rsf3dLocalization::publish_map(const std::vector<Point3f>& points)
   {
     *x = c[0] / c[3];
     *y = c[1] / c[3];
-    *z = c[2] / c[3];
+    *z = c[2] / c[3] - ground;
     ++x, ++y, ++z;
   }
   map_publisher_->publish(msg);
-  RCLCPP_INFO(this->get_logger(), "map published: %zu points", cells.size());
+  RCLCPP_INFO(this->get_logger(), "map published: %zu points, lowered by %.2f m", cells.size(), ground);
 }
 
 void Rsf3dLocalization::on_imu(const sensor_msgs::msg::Imu::SharedPtr msg)
@@ -691,7 +707,8 @@ void Rsf3dLocalization::publish(const rclcpp::Time& stamp, const Transform& odom
   tf_msg.transform.translation.y = map_odom.position.y;
   tf_msg.transform.translation.z = map_odom.position.z;
   tf_msg.transform.rotation = map_odom.orientation;
-  tf_broadcaster_->sendTransform(tf_msg);
+  if (params_.publish_tf)
+    tf_broadcaster_->sendTransform(tf_msg);
   geometry_msgs::msg::PoseWithCovarianceStamped pose_msg;
   pose_msg.header.stamp = stamp;
   pose_msg.header.frame_id = params_.map_frame;

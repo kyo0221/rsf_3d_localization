@@ -70,5 +70,6 @@
                              0.0, 0.0, 0.0, 0.0, 0.0003, 0.0,
                              0.0, 0.0, 0.0, 0.0, 0.0, 0.001]
     transform_tolerance: 0.2
+    publish_tf: true
     tf_timeout: 0.1
     imu_wait: 0.2

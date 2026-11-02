@@ -90,6 +90,7 @@ struct Params
   double output_rate_d, output_rate_a, output_grade;
   std::array<double, 36> output_pose_covariance;
   double transform_tolerance, tf_timeout, imu_wait;
+  bool publish_tf;
 };
 
 class Rsf3dLocalization : public rclcpp::Node

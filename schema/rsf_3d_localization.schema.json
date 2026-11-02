@@ -403,6 +403,11 @@
             "type": "number"
           }
         },
+        "publish_tf": {
+          "type": "boolean",
+          "description": "Broadcast the map to odom transform.",
+          "default": true
+        },
         "transform_tolerance": {
           "type": "number",
           "description": "Future dating of the published transform [s].",
@@ -484,6 +489,7 @@
         "output_rate_a",
         "output_grade",
         "output_pose_covariance",
+        "publish_tf",
         "transform_tolerance",
         "tf_timeout",
         "imu_wait"
