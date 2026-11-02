@@ -272,22 +272,16 @@ void Rsf3dLocalization::publish_map(const std::vector<Point3f>& points)
 {
   float inv_size = static_cast<float>(1.0 / params_.map_visualization_voxel_size);
   std::unordered_map<int64_t, std::array<float, 4>, VoxelKeyHash> cells;
-  std::unordered_map<int64_t, float, VoxelKeyHash> lowest;
   for (const auto& p : points)
   {
     auto& c = cells[voxel_key(static_cast<int64_t>(std::floor(p.x * inv_size)),
                               static_cast<int64_t>(std::floor(p.y * inv_size)),
                               static_cast<int64_t>(std::floor(p.z * inv_size)))];
     c[0] += p.x, c[1] += p.y, c[2] += p.z, c[3] += 1.0f;
-    int64_t column =
-        voxel_key(static_cast<int64_t>(std::floor(p.x * 0.2f)), static_cast<int64_t>(std::floor(p.y * 0.2f)), 0);
-    auto [it, inserted] = lowest.try_emplace(column, p.z);
-    if (!inserted)
-      it->second = std::min(it->second, p.z);
   }
   std::vector<float> floors;
-  floors.reserve(lowest.size());
-  for (const auto& [key, z] : lowest)
+  floors.reserve(ground_.size());
+  for (const auto& [key, z] : ground_)
     floors.push_back(z);
   float ground = 0.0f;
   if (!floors.empty())
