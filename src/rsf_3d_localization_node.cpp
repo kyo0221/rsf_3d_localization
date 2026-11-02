@@ -102,6 +102,7 @@ void Rsf3dLocalization::init_map_param()
   params_.ndt_coarse_resolution = this->declare_parameter<double>("ndt_coarse_resolution");
   params_.map_min_points = this->declare_parameter<int>("map_min_points");
   params_.map_eigen_ratio = this->declare_parameter<double>("map_eigen_ratio");
+  params_.map_visualization_voxel_size = this->declare_parameter<double>("map_visualization_voxel_size");
   params_.ndt_max_iterations = this->declare_parameter<int>("ndt_max_iterations");
   params_.ndt_epsilon = this->declare_parameter<double>("ndt_epsilon");
   params_.grid.resolution = this->declare_parameter<double>("grid_resolution");
@@ -193,6 +194,8 @@ void Rsf3dLocalization::init_interfaces()
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);
   pose_publisher_ =
       this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("~/output/pose_with_covariance", 10);
+  map_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
+      "~/output/pointcloud_map", rclcpp::QoS(1).reliable().transient_local());
   cloud_subscriber_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
       "~/input/pointcloud", rclcpp::SensorDataQoS(),
       std::bind(&Rsf3dLocalization::on_cloud, this, std::placeholders::_1));
@@ -218,9 +221,39 @@ void Rsf3dLocalization::load_map()
   map_.build(points, params_.map_resolution, params_.map_min_points, params_.map_eigen_ratio);
   coarse_map_.build(points, params_.ndt_coarse_resolution, params_.map_min_points, params_.map_eigen_ratio);
   grid_.build(points, params_.grid);
+  publish_map(points);
   double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
   RCLCPP_INFO(this->get_logger(), "map loaded: %zu points, %zu voxels, %.1f s", points.size(), map_.voxels().size(),
               elapsed);
+}
+
+void Rsf3dLocalization::publish_map(const std::vector<Point3f>& points)
+{
+  float inv_size = static_cast<float>(1.0 / params_.map_visualization_voxel_size);
+  std::unordered_map<int64_t, std::array<float, 4>, VoxelKeyHash> cells;
+  for (const auto& p : points)
+  {
+    auto& c = cells[voxel_key(static_cast<int64_t>(std::floor(p.x * inv_size)),
+                              static_cast<int64_t>(std::floor(p.y * inv_size)),
+                              static_cast<int64_t>(std::floor(p.z * inv_size)))];
+    c[0] += p.x, c[1] += p.y, c[2] += p.z, c[3] += 1.0f;
+  }
+  sensor_msgs::msg::PointCloud2 msg;
+  msg.header.frame_id = params_.map_frame;
+  msg.header.stamp = this->now();
+  sensor_msgs::PointCloud2Modifier modifier(msg);
+  modifier.setPointCloud2FieldsByString(1, "xyz");
+  modifier.resize(cells.size());
+  sensor_msgs::PointCloud2Iterator<float> x(msg, "x"), y(msg, "y"), z(msg, "z");
+  for (const auto& [key, c] : cells)
+  {
+    *x = c[0] / c[3];
+    *y = c[1] / c[3];
+    *z = c[2] / c[3];
+    ++x, ++y, ++z;
+  }
+  map_publisher_->publish(msg);
+  RCLCPP_INFO(this->get_logger(), "map published: %zu points", cells.size());
 }
 
 void Rsf3dLocalization::on_imu(const sensor_msgs::msg::Imu::SharedPtr msg)

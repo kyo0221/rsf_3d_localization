@@ -111,6 +111,11 @@
           "description": "Scan accumulation time [s].",
           "default": 1.0
         },
+        "map_visualization_voxel_size": {
+          "type": "number",
+          "description": "Voxel size of the point cloud map published for visualization [m].",
+          "default": 0.5
+        },
         "scan_voxel_size": {
           "type": "number",
           "description": "Scan downsampling voxel size [m].",
@@ -436,6 +441,7 @@
         "range_min",
         "range_max",
         "scan_accumulate_s",
+        "map_visualization_voxel_size",
         "scan_voxel_size",
         "max_points",
         "update_min_d",

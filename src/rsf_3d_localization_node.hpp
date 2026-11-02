@@ -72,6 +72,7 @@ struct Params
   double ndt_epsilon;
   GridParams grid;
   Pose6 initial_pose;
+  double map_visualization_voxel_size;
   double range_min, range_max, scan_accumulate_s, scan_voxel_size;
   double update_min_d, update_min_a, update_max_dt, alpha_threshold, ndt_gate;
   Eigen::Matrix<double, 6, 1> ndt_sigma;
@@ -127,6 +128,7 @@ private:
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr pose_publisher_;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr map_publisher_;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_subscriber_;
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_subscriber_;
   rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr gnss_subscriber_;
@@ -138,6 +140,7 @@ private:
   void init_gnss_param();
   void init_interfaces();
   void load_map();
+  void publish_map(const std::vector<Point3f>& points);
 
   void on_cloud(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
   void on_imu(const sensor_msgs::msg::Imu::SharedPtr msg);

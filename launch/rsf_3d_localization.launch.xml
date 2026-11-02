@@ -17,5 +17,6 @@
     <remap from="~/input/gnss" to="$(var input_gnss)"/>
     <remap from="~/input/initialpose" to="/initialpose"/>
     <remap from="~/output/pose_with_covariance" to="/rsf_3d_localization/pose_with_covariance"/>
+    <remap from="~/output/pointcloud_map" to="/rsf_3d_localization/pointcloud_map"/>
   </node>
 </launch>
