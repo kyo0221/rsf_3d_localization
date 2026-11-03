@@ -3,7 +3,7 @@
 <package format="3">
   <name>rsf_3d_localization</name>
   <version>0.1.0</version>
-  <description>Lightweight 3D localization on a point cloud map fusing IMU, odometry, RTK GNSS and NDT scan matching in an error-state Kalman filter</description>
+  <description>3D localization on a point cloud map with a particle filter and an error-state Kalman filter fusing IMU, wheel speed and RTK GNSS</description>
   <maintainer email="s23c1036dv@chibatech.ac.jp">kyo</maintainer>
   <license>Apache-2.0</license>
   <author email="s23c1036dv@chibatech.ac.jp">kyo</author>

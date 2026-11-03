@@ -1,16 +1,4 @@
-// Copyright 2026 kyo
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2026 kyo, SPDX-License-Identifier: Apache-2.0
 
 #include "rsf_3d_localization_node.hpp"
 
@@ -371,13 +359,10 @@ void Rsf3dLocalization::on_wheel(const nav_msgs::msg::Odometry::SharedPtr msg)
   double speed = msg->twist.twist.linear.x;
   if (!std::isfinite(speed))
     return;
-  WheelSample sample{ stamp_of(msg->header.stamp), speed };
-  wheel_queue_.insert(std::upper_bound(wheel_queue_.begin(), wheel_queue_.end(), sample.stamp,
-                                       [](double t, const WheelSample& w) { return t < w.stamp; }),
-                      sample);
-  last_wheel_stamp_ = std::max(last_wheel_stamp_, sample.stamp);
-  while (wheel_queue_.size() > 200)
-    wheel_queue_.pop_front();
+  wheel_speeds_.push_back(speed);
+  while (wheel_speeds_.size() > 50)
+    wheel_speeds_.pop_front();
+  wheel_received_ = this->now().seconds();
 }
 
 void Rsf3dLocalization::on_initial_pose(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg)
@@ -487,12 +472,18 @@ void Rsf3dLocalization::accumulate_cloud(const PendingScan& scan, const Transfor
   clouds_.push_back(std::move(cloud));
 }
 
-std::optional<double> Rsf3dLocalization::initial_speed(double t) const
+std::optional<double> Rsf3dLocalization::initial_speed()
 {
-  for (auto it = wheel_queue_.rbegin(); it != wheel_queue_.rend(); ++it)
-    if (it->stamp <= t + 0.1)
-      return t - it->stamp < params_.wheel_timeout ? std::optional<double>(it->speed) : std::nullopt;
-  return std::nullopt;
+  std::optional<double> speed;
+  if (!wheel_speeds_.empty() && wheel_fresh())
+    speed = wheel_speeds_.back();
+  wheel_speeds_.clear();
+  return speed;
+}
+
+bool Rsf3dLocalization::wheel_fresh() const
+{
+  return this->now().seconds() - wheel_received_ <= params_.wheel_timeout;
 }
 
 std::optional<Eigen::Vector3d> Rsf3dLocalization::mean_acc() const
@@ -584,7 +575,7 @@ bool Rsf3dLocalization::initialize(double t)
   auto ground = ground_height(pose.x, pose.y);
   if (std::fabs(pose.z) < 1e-6 && ground)
     pose.z = *ground;
-  eskf_.reset(to_transform(pose), initial_speed(t).value_or(0.0));
+  eskf_.reset(to_transform(pose), initial_speed().value_or(0.0));
   particles_.reset(to_transform(pose), params_.particle_count, params_.initial_spread, 1U);
   particle_gnss_.clear();
   clouds_.clear();
@@ -651,22 +642,25 @@ void Rsf3dLocalization::predict_step(const Eigen::Vector3d& gyro, const Eigen::V
     position_history_.pop_front();
   eskf_.update_lateral_constraint(params_.lateral_sigma);
   update_gnss(t);
-  update_wheel(t);
+  update_wheel();
 }
 
-void Rsf3dLocalization::update_wheel(double t)
+void Rsf3dLocalization::update_wheel()
 {
-  if (t - last_wheel_stamp_ > params_.wheel_timeout)
-    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000, "no wheel odometry for %.1f s",
-                         t - last_wheel_stamp_);
-  while (!wheel_queue_.empty() && wheel_queue_.front().stamp <= t)
+  if (!wheel_fresh())
   {
-    WheelSample sample = wheel_queue_.front();
-    wheel_queue_.pop_front();
-    if (t - sample.stamp > params_.wheel_timeout || std::fabs(sample.speed) > params_.wheel_max_speed)
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000, "no wheel odometry within %.1f s",
+                         params_.wheel_timeout);
+    wheel_speeds_.clear();
+    return;
+  }
+  for (; !wheel_speeds_.empty(); wheel_speeds_.pop_front())
+  {
+    double speed = wheel_speeds_.front();
+    if (std::fabs(speed) > params_.wheel_max_speed)
       continue;
-    double nis = eskf_.update_forward_speed(sample.speed, params_.wheel_speed_sigma, params_.wheel_speed_gate,
-                                            wheel_rejects_ >= 2);
+    double nis =
+        eskf_.update_forward_speed(speed, params_.wheel_speed_sigma, params_.wheel_speed_gate, wheel_rejects_ >= 2);
     wheel_rejects_ = nis > 0.0 ? wheel_rejects_ + 1 : 0;
   }
 }

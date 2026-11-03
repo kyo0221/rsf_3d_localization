@@ -413,7 +413,7 @@
         },
         "wheel_timeout": {
           "type": "number",
-          "description": "Wheel odometry samples older than this are ignored [s].",
+          "description": "Wheel speed is not used when no wheel odometry has been received for this long [s].",
           "default": 0.5,
           "minimum": 0.0
         },

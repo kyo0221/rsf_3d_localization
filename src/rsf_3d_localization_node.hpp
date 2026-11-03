@@ -1,16 +1,4 @@
-// Copyright 2026 kyo
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2026 kyo, SPDX-License-Identifier: Apache-2.0
 
 #ifndef RSF_3D_LOCALIZATION_NODE_HPP_
 #define RSF_3D_LOCALIZATION_NODE_HPP_
@@ -49,11 +37,6 @@ struct PendingScan
   double stamp;
   Transform base_sensor, odom_base;
   std::vector<Point3f> points;
-};
-
-struct WheelSample
-{
-  double stamp, speed;
 };
 
 struct StampedCloud
@@ -133,8 +116,8 @@ private:
   std::vector<GnssSample> particle_gnss_;
   std::deque<StampedPosition> position_history_;
   std::deque<PendingScan> scan_queue_;
-  std::deque<WheelSample> wheel_queue_;
-  double last_wheel_stamp_ = -1e18;
+  std::deque<double> wheel_speeds_;
+  double wheel_received_ = -1e18;
   std::optional<Pose6> pending_pose_;
   bool initialized_ = false;
   bool searching_ = false;
@@ -186,7 +169,7 @@ private:
   void process_scans();
   std::vector<Point3f> read_points(const sensor_msgs::msg::PointCloud2& msg) const;
   void accumulate_cloud(const PendingScan& scan, const Transform& frame_base);
-  std::optional<double> initial_speed(double t) const;
+  std::optional<double> initial_speed();
   bool initialize(double t);
   std::optional<Eigen::Vector3d> mean_acc() const;
   void start_search(double t, const Transform& odom_base);
@@ -194,7 +177,8 @@ private:
   bool update_due(const Pose6& moved, double dt) const;
   void advance(double t);
   void predict_step(const Eigen::Vector3d& gyro, const Eigen::Vector3d& acc, double t, double dt);
-  void update_wheel(double t);
+  void update_wheel();
+  bool wheel_fresh() const;
   void update_gnss(double t);
   void update_particles(double t);
   void weight_gnss();
