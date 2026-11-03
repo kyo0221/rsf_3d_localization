@@ -26,6 +26,29 @@
           "description": "Robot base frame.",
           "default": "base_footprint"
         },
+        "field_resolution": {
+          "type": "number",
+          "description": "Cell size of the 3D distance field [m].",
+          "default": 0.2,
+          "minimum": 0.01
+        },
+        "field_max_distance": {
+          "type": "number",
+          "description": "Distance at which the 3D distance field is truncated [m].",
+          "default": 1.0,
+          "minimum": 0.01
+        },
+        "field_threads": {
+          "type": "integer",
+          "description": "Threads used to build the distance field.",
+          "default": 8,
+          "minimum": 1
+        },
+        "map_visualization_voxel_size": {
+          "type": "number",
+          "description": "Voxel size of the point cloud map published for visualization [m].",
+          "default": 0.5
+        },
         "initial_pose_x": {
           "type": "number",
           "description": "Initial x [m].",
@@ -60,29 +83,6 @@
           "type": "number",
           "description": "Scan accumulation time [s].",
           "default": 1.0
-        },
-        "field_resolution": {
-          "type": "number",
-          "description": "Cell size of the 3D distance field [m].",
-          "default": 0.2,
-          "minimum": 0.01
-        },
-        "field_max_distance": {
-          "type": "number",
-          "description": "Distance at which the 3D distance field is truncated [m].",
-          "default": 1.0,
-          "minimum": 0.01
-        },
-        "field_threads": {
-          "type": "integer",
-          "description": "Threads used to build the distance field.",
-          "default": 8,
-          "minimum": 1
-        },
-        "map_visualization_voxel_size": {
-          "type": "number",
-          "description": "Voxel size of the point cloud map published for visualization [m].",
-          "default": 0.5
         },
         "scan_voxel_size": {
           "type": "number",
@@ -385,9 +385,9 @@
           "description": "Gyro bias random walk.",
           "default": 0.0001
         },
-        "sigma_odom_scale": {
+        "sigma_wheel_scale": {
           "type": "number",
-          "description": "Odometry speed scale random walk.",
+          "description": "Process noise of the wheel speed scale [1/sqrt(s)].",
           "default": 0.002
         },
         "lateral_sigma": {
@@ -395,45 +395,27 @@
           "description": "Standard deviation of the zero lateral and vertical body velocity constraint [m/s].",
           "default": 0.7
         },
-        "odom_speed_period": {
+        "wheel_speed_sigma": {
           "type": "number",
-          "description": "Interval between odometry speed updates [s].",
-          "default": 0.5
+          "description": "Standard deviation of the wheel forward speed [m/s].",
+          "default": 0.3,
+          "minimum": 0.001
         },
-        "odom_speed_window": {
+        "wheel_speed_gate": {
           "type": "number",
-          "description": "Time window of the odometry speed difference [s].",
-          "default": 0.5
-        },
-        "odom_speed_sigma": {
-          "type": "number",
-          "description": "Standard deviation of the odometry speed [m/s].",
-          "default": 0.8
-        },
-        "odom_speed_gate": {
-          "type": "number",
-          "description": "Mahalanobis gate of the odometry speed.",
+          "description": "Mahalanobis gate for wheel speed updates.",
           "default": 9.0
         },
-        "odom_max_speed": {
+        "wheel_max_speed": {
           "type": "number",
-          "description": "Odometry speeds above this are ignored [m/s].",
+          "description": "Wheel speeds above this are ignored [m/s].",
           "default": 2.2
         },
-        "odom_max_lateral_speed": {
+        "wheel_timeout": {
           "type": "number",
-          "description": "Odometry steps with more lateral speed are ignored [m/s].",
-          "default": 0.3
-        },
-        "restart_stop_s": {
-          "type": "number",
-          "description": "Stop duration after which a restart is detected [s].",
-          "default": 2.0
-        },
-        "restart_hold_s": {
-          "type": "number",
-          "description": "Time after a restart during which the odometry speed is ignored [s].",
-          "default": 5.0
+          "description": "Wheel odometry samples older than this are ignored [s].",
+          "default": 0.5,
+          "minimum": 0.0
         },
         "gnss_origin_lat": {
           "type": "number",
@@ -511,11 +493,6 @@
           "description": "Outlier ratio of an RTK fix for particle weights.",
           "default": 0.02,
           "minimum": 0.0
-        },
-        "use_float": {
-          "type": "boolean",
-          "description": "Weight particles with non-fix GNSS solutions.",
-          "default": true
         },
         "particle_float_sigma_xy": {
           "type": "number",
@@ -595,15 +572,15 @@
             "type": "number"
           }
         },
-        "publish_tf": {
-          "type": "boolean",
-          "description": "Broadcast the map to odom transform.",
-          "default": true
-        },
         "transform_tolerance": {
           "type": "number",
           "description": "Future dating of the published transform [s].",
           "default": 0.2
+        },
+        "publish_tf": {
+          "type": "boolean",
+          "description": "Broadcast the map to odom transform.",
+          "default": true
         },
         "tf_timeout": {
           "type": "number",
@@ -621,6 +598,10 @@
         "map_frame",
         "odom_frame",
         "base_frame",
+        "field_resolution",
+        "field_max_distance",
+        "field_threads",
+        "map_visualization_voxel_size",
         "initial_pose_x",
         "initial_pose_y",
         "initial_pose_z",
@@ -628,10 +609,6 @@
         "range_min",
         "range_max",
         "scan_accumulate_s",
-        "field_resolution",
-        "field_max_distance",
-        "field_threads",
-        "map_visualization_voxel_size",
         "scan_voxel_size",
         "max_points",
         "update_min_d",
@@ -677,16 +654,12 @@
         "sigma_gyro",
         "sigma_acc_bias",
         "sigma_gyro_bias",
-        "sigma_odom_scale",
+        "sigma_wheel_scale",
         "lateral_sigma",
-        "odom_speed_period",
-        "odom_speed_window",
-        "odom_speed_sigma",
-        "odom_speed_gate",
-        "odom_max_speed",
-        "odom_max_lateral_speed",
-        "restart_stop_s",
-        "restart_hold_s",
+        "wheel_speed_sigma",
+        "wheel_speed_gate",
+        "wheel_max_speed",
+        "wheel_timeout",
         "gnss_origin_lat",
         "gnss_origin_lon",
         "gnss_offset",
@@ -699,7 +672,6 @@
         "particle_fix_sigma_xy",
         "particle_fix_sigma_z",
         "particle_fix_outlier",
-        "use_float",
         "particle_float_sigma_xy",
         "particle_float_sigma_z",
         "particle_float_outlier",
@@ -707,8 +679,8 @@
         "output_rate_a",
         "output_grade",
         "output_pose_covariance",
-        "publish_tf",
         "transform_tolerance",
+        "publish_tf",
         "tf_timeout",
         "imu_wait"
       ],

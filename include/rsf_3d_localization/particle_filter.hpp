@@ -69,7 +69,7 @@ public:
   void reset(const Transform& center, int count, const PoseSpread& spread, uint32_t seed);
   void reset_uniform_yaw(const Transform& center, int count, const PoseSpread& spread, uint32_t seed);
   void predict(const Transform& delta, double dt, const MotionNoise& noise);
-  double weight_scan(const LikelihoodField& field, const std::vector<Point3f>& scan, const ScanModel& model);
+  void weight_scan(const LikelihoodField& field, const std::vector<Point3f>& scan, const ScanModel& model);
   void weight_position(const Vec3& measured, const Vec3& lever, double sigma_xy, double sigma_z, double outlier);
   double mass_near(const Vec3& measured, const Vec3& lever, double radius) const;
   void inject(const Transform& center, double ratio, const PoseSpread& spread);

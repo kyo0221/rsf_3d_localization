@@ -60,16 +60,12 @@
     sigma_gyro: 0.01
     sigma_acc_bias: 0.001
     sigma_gyro_bias: 0.0001
-    sigma_odom_scale: 0.002
+    sigma_wheel_scale: 0.002
     lateral_sigma: 0.7
-    odom_speed_period: 0.5
-    odom_speed_window: 0.5
-    odom_speed_sigma: 0.8
-    odom_speed_gate: 9.0
-    odom_max_speed: 2.2
-    odom_max_lateral_speed: 0.3
-    restart_stop_s: 2.0
-    restart_hold_s: 5.0
+    wheel_speed_sigma: 0.3
+    wheel_speed_gate: 9.0
+    wheel_max_speed: 2.2
+    wheel_timeout: 0.5
     gnss_origin_lat: 36.082628231
     gnss_origin_lon: 140.076144739
     gnss_offset: [-36.1765, -27.9854, -41.1224]
@@ -82,7 +78,6 @@
     particle_fix_sigma_xy: 0.15
     particle_fix_sigma_z: 0.3
     particle_fix_outlier: 0.02
-    use_float: true
     particle_float_sigma_xy: 3.0
     particle_float_sigma_z: 10.0
     particle_float_outlier: 0.3

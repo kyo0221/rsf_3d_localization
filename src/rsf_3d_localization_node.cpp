@@ -198,16 +198,12 @@ void Rsf3dLocalization::init_filter_param()
   params_.noise.gyro = this->declare_parameter<double>("sigma_gyro");
   params_.noise.acc_bias = this->declare_parameter<double>("sigma_acc_bias");
   params_.noise.gyro_bias = this->declare_parameter<double>("sigma_gyro_bias");
-  params_.noise.odom_scale = this->declare_parameter<double>("sigma_odom_scale");
+  params_.noise.wheel_scale = this->declare_parameter<double>("sigma_wheel_scale");
   params_.lateral_sigma = this->declare_parameter<double>("lateral_sigma");
-  params_.odom_speed_period = this->declare_parameter<double>("odom_speed_period");
-  params_.odom_speed_window = this->declare_parameter<double>("odom_speed_window");
-  params_.odom_speed_sigma = this->declare_parameter<double>("odom_speed_sigma");
-  params_.odom_speed_gate = this->declare_parameter<double>("odom_speed_gate");
-  params_.odom_max_speed = this->declare_parameter<double>("odom_max_speed");
-  params_.odom_max_lateral_speed = this->declare_parameter<double>("odom_max_lateral_speed");
-  params_.restart_stop_s = this->declare_parameter<double>("restart_stop_s");
-  params_.restart_hold_s = this->declare_parameter<double>("restart_hold_s");
+  params_.wheel_speed_sigma = this->declare_parameter<double>("wheel_speed_sigma");
+  params_.wheel_speed_gate = this->declare_parameter<double>("wheel_speed_gate");
+  params_.wheel_max_speed = this->declare_parameter<double>("wheel_max_speed");
+  params_.wheel_timeout = this->declare_parameter<double>("wheel_timeout");
 }
 
 void Rsf3dLocalization::init_gnss_param()
@@ -229,7 +225,6 @@ void Rsf3dLocalization::init_gnss_param()
   params_.particle_fix_sigma_xy = this->declare_parameter<double>("particle_fix_sigma_xy");
   params_.particle_fix_sigma_z = this->declare_parameter<double>("particle_fix_sigma_z");
   params_.particle_fix_outlier = this->declare_parameter<double>("particle_fix_outlier");
-  params_.use_float = this->declare_parameter<bool>("use_float");
   params_.particle_float_sigma_xy = this->declare_parameter<double>("particle_float_sigma_xy");
   params_.particle_float_sigma_z = this->declare_parameter<double>("particle_float_sigma_z");
   params_.particle_float_outlier = this->declare_parameter<double>("particle_float_outlier");
@@ -257,6 +252,9 @@ void Rsf3dLocalization::init_interfaces()
       std::bind(&Rsf3dLocalization::on_imu, this, std::placeholders::_1));
   gnss_subscriber_ = this->create_subscription<sensor_msgs::msg::NavSatFix>(
       "~/input/gnss", rclcpp::SensorDataQoS(), std::bind(&Rsf3dLocalization::on_gnss, this, std::placeholders::_1));
+  wheel_subscriber_ = this->create_subscription<nav_msgs::msg::Odometry>(
+      "~/input/wheel_odom", rclcpp::SensorDataQoS().keep_last(100),
+      std::bind(&Rsf3dLocalization::on_wheel, this, std::placeholders::_1));
   initial_pose_subscriber_ = this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
       "~/input/initialpose", 1, std::bind(&Rsf3dLocalization::on_initial_pose, this, std::placeholders::_1));
 }
@@ -350,8 +348,6 @@ void Rsf3dLocalization::on_imu(const sensor_msgs::msg::Imu::SharedPtr msg)
                                      [](double t, const ImuSample& s) { return t < s.stamp; }),
                     sample);
   imu_recent_.push_back(sample);
-  if (++imu_count_ % 10000 == 0)
-    RCLCPP_DEBUG(this->get_logger(), "imu %ld stamp %.3f", imu_count_, sample.stamp);
   while (imu_recent_.size() > 1 && imu_recent_.front().stamp < sample.stamp - 1.0)
     imu_recent_.pop_front();
   process_scans();
@@ -364,12 +360,24 @@ void Rsf3dLocalization::on_gnss(const sensor_msgs::msg::NavSatFix::SharedPtr msg
     return;
   bool fix = msg->status.status >= sensor_msgs::msg::NavSatStatus::STATUS_GBAS_FIX &&
              msg->position_covariance[0] <= params_.gnss_max_variance;
-  if (!fix && !params_.use_float)
-    return;
   Eigen::Vector3d position((msg->longitude - params_.gnss_origin_lon) * M_PI / 180.0 * gnss_n_,
                            (msg->latitude - params_.gnss_origin_lat) * M_PI / 180.0 * gnss_m_, msg->altitude);
   gnss_queue_.push_back(
       { stamp_of(msg->header.stamp) - params_.gnss_time_offset, position + params_.gnss_offset, fix });
+}
+
+void Rsf3dLocalization::on_wheel(const nav_msgs::msg::Odometry::SharedPtr msg)
+{
+  double speed = msg->twist.twist.linear.x;
+  if (!std::isfinite(speed))
+    return;
+  WheelSample sample{ stamp_of(msg->header.stamp), speed };
+  wheel_queue_.insert(std::upper_bound(wheel_queue_.begin(), wheel_queue_.end(), sample.stamp,
+                                       [](double t, const WheelSample& w) { return t < w.stamp; }),
+                      sample);
+  last_wheel_stamp_ = std::max(last_wheel_stamp_, sample.stamp);
+  while (wheel_queue_.size() > 200)
+    wheel_queue_.pop_front();
 }
 
 void Rsf3dLocalization::on_initial_pose(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg)
@@ -399,17 +407,7 @@ void Rsf3dLocalization::on_cloud(const sensor_msgs::msg::PointCloud2::SharedPtr 
   Transform base_sensor, odom_base;
   if (!lookup_transforms(*msg, stamp, base_sensor, odom_base))
     return;
-  double t = stamp.seconds();
-  if (!odom_history_.empty() && t < odom_history_.back().stamp)
-  {
-    odom_history_.clear();
-    clouds_.clear();
-  }
-  odom_history_.push_back({ t, odom_base });
-  while (odom_history_.front().stamp < t - 2.0)
-    odom_history_.pop_front();
-  accumulate_cloud(*msg, compose(odom_base, base_sensor), t);
-  scan_queue_.push_back({ t, odom_base });
+  scan_queue_.push_back({ stamp.seconds(), base_sensor, odom_base, read_points(*msg) });
   process_scans();
 }
 
@@ -417,7 +415,7 @@ void Rsf3dLocalization::process_scans()
 {
   while (!scan_queue_.empty())
   {
-    StampedTransform scan = scan_queue_.front();
+    PendingScan scan = std::move(scan_queue_.front());
     double latest = imu_recent_.empty() ? -1e18 : imu_recent_.back().stamp;
     if (latest < scan.stamp && scan_queue_.back().stamp - scan.stamp < params_.imu_wait)
       return;
@@ -426,16 +424,18 @@ void Rsf3dLocalization::process_scans()
       continue;
     if (!initialized_)
     {
+      accumulate_cloud(scan, scan.odom_base);
       if (searching_)
-        step_search(scan.stamp, scan.transform);
+        step_search(scan.stamp, scan.odom_base);
       else if (params_.gnss_initialize)
-        start_search(scan.stamp, scan.transform);
+        start_search(scan.stamp, scan.odom_base);
       continue;
     }
     advance(scan.stamp);
-    update_particles(scan.stamp, scan.transform);
+    accumulate_cloud(scan, shadow_);
+    update_particles(scan.stamp);
     update_output(scan.stamp);
-    publish(rclcpp::Time(static_cast<int64_t>(scan.stamp * 1e9), this->get_clock()->get_clock_type()), scan.transform);
+    publish(rclcpp::Time(static_cast<int64_t>(scan.stamp * 1e9), this->get_clock()->get_clock_type()), scan.odom_base);
   }
 }
 
@@ -456,24 +456,43 @@ bool Rsf3dLocalization::lookup_transforms(const sensor_msgs::msg::PointCloud2& m
   return true;
 }
 
-void Rsf3dLocalization::accumulate_cloud(const sensor_msgs::msg::PointCloud2& msg, const Transform& odom_sensor,
-                                         double t)
+std::vector<Point3f> Rsf3dLocalization::read_points(const sensor_msgs::msg::PointCloud2& msg) const
 {
-  while (!clouds_.empty() && clouds_.front().stamp < t - params_.scan_accumulate_s)
-    clouds_.pop_front();
-  StampedCloud cloud;
-  cloud.stamp = t;
-  cloud.points.reserve(msg.width * msg.height);
+  std::vector<Point3f> points;
+  points.reserve(msg.width * msg.height);
   double min2 = params_.range_min * params_.range_min, max2 = params_.range_max * params_.range_max;
   for (sensor_msgs::PointCloud2ConstIterator<float> x(msg, "x"), y(msg, "y"), z(msg, "z"); x != x.end(); ++x, ++y, ++z)
   {
     double r2 = *x * *x + *y * *y + *z * *z;
-    if (!std::isfinite(r2) || r2 < min2 || r2 > max2)
-      continue;
-    Vec3 p = apply(odom_sensor, { *x, *y, *z });
-    cloud.points.push_back({ static_cast<float>(p[0]), static_cast<float>(p[1]), static_cast<float>(p[2]) });
+    if (std::isfinite(r2) && r2 >= min2 && r2 <= max2)
+      points.push_back({ *x, *y, *z });
+  }
+  return points;
+}
+
+void Rsf3dLocalization::accumulate_cloud(const PendingScan& scan, const Transform& frame_base)
+{
+  while (!clouds_.empty() &&
+         (clouds_.front().stamp < scan.stamp - params_.scan_accumulate_s || clouds_.front().stamp > scan.stamp))
+    clouds_.pop_front();
+  Transform frame_sensor = compose(frame_base, scan.base_sensor);
+  StampedCloud cloud;
+  cloud.stamp = scan.stamp;
+  cloud.points.reserve(scan.points.size());
+  for (const auto& p : scan.points)
+  {
+    Vec3 q = apply(frame_sensor, { p.x, p.y, p.z });
+    cloud.points.push_back({ static_cast<float>(q[0]), static_cast<float>(q[1]), static_cast<float>(q[2]) });
   }
   clouds_.push_back(std::move(cloud));
+}
+
+std::optional<double> Rsf3dLocalization::initial_speed(double t) const
+{
+  for (auto it = wheel_queue_.rbegin(); it != wheel_queue_.rend(); ++it)
+    if (it->stamp <= t + 0.1)
+      return t - it->stamp < params_.wheel_timeout ? std::optional<double>(it->speed) : std::nullopt;
+  return std::nullopt;
 }
 
 std::optional<Eigen::Vector3d> Rsf3dLocalization::mean_acc() const
@@ -565,11 +584,10 @@ bool Rsf3dLocalization::initialize(double t)
   auto ground = ground_height(pose.x, pose.y);
   if (std::fabs(pose.z) < 1e-6 && ground)
     pose.z = *ground;
-  double speed_stamp;
-  auto velocity = odom_velocity(t, speed_stamp);
-  eskf_.reset(to_transform(pose), velocity ? velocity->x() : 0.0);
+  eskf_.reset(to_transform(pose), initial_speed(t).value_or(0.0));
   particles_.reset(to_transform(pose), params_.particle_count, params_.initial_spread, 1U);
   particle_gnss_.clear();
+  clouds_.clear();
   while (!imu_queue_.empty() && imu_queue_.front().stamp <= t)
     imu_queue_.pop_front();
   while (!gnss_queue_.empty() && gnss_queue_.front().stamp <= t)
@@ -580,9 +598,7 @@ bool Rsf3dLocalization::initialize(double t)
   last_update_pose_ = eskf_.pose();
   shadow_ = eskf_.pose();
   particle_shadow_ = shadow_;
-  rejects_ = low_streak_ = gnss_rejects_ = fix_misses_ = odom_rejects_ = 0;
-  still_time_ = moving_time_ = 0.0;
-  restart_until_ = -1e18;
+  rejects_ = low_streak_ = gnss_rejects_ = fix_misses_ = wheel_rejects_ = 0;
   has_output_ = false;
   initialized_ = true;
   searching_ = false;
@@ -633,66 +649,26 @@ void Rsf3dLocalization::predict_step(const Eigen::Vector3d& gyro, const Eigen::V
   position_history_.push_back({ t, Eigen::Vector3d(now.t[0], now.t[1], now.t[2]) });
   while (position_history_.size() > 1 && position_history_.front().stamp < t - 2.0)
     position_history_.pop_front();
-  track_restart(dt);
   eskf_.update_lateral_constraint(params_.lateral_sigma);
   update_gnss(t);
-  update_speed(t);
+  update_wheel(t);
 }
 
-void Rsf3dLocalization::track_restart(double dt)
+void Rsf3dLocalization::update_wheel(double t)
 {
-  double stamp;
-  auto velocity = odom_velocity(filter_time_, stamp);
-  bool still = std::fabs(eskf_.forward_speed()) < 0.2 && (!velocity || std::fabs(velocity->x()) < 0.15);
-  moving_time_ = still ? 0.0 : moving_time_ + dt;
-  if (still)
-    still_time_ += dt;
-  else if (moving_time_ >= 0.3)
+  if (t - last_wheel_stamp_ > params_.wheel_timeout)
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000, "no wheel odometry for %.1f s",
+                         t - last_wheel_stamp_);
+  while (!wheel_queue_.empty() && wheel_queue_.front().stamp <= t)
   {
-    if (still_time_ > params_.restart_stop_s)
-      restart_until_ = filter_time_ + params_.restart_hold_s;
-    still_time_ = 0.0;
+    WheelSample sample = wheel_queue_.front();
+    wheel_queue_.pop_front();
+    if (t - sample.stamp > params_.wheel_timeout || std::fabs(sample.speed) > params_.wheel_max_speed)
+      continue;
+    double nis = eskf_.update_forward_speed(sample.speed, params_.wheel_speed_sigma, params_.wheel_speed_gate,
+                                            wheel_rejects_ >= 2);
+    wheel_rejects_ = nis > 0.0 ? wheel_rejects_ + 1 : 0;
   }
-}
-
-std::optional<Eigen::Vector3d> Rsf3dLocalization::odom_velocity(double t, double& stamp) const
-{
-  auto end = std::upper_bound(odom_history_.begin(), odom_history_.end(), t,
-                              [](double v, const StampedTransform& s) { return v < s.stamp; });
-  if (end == odom_history_.begin())
-    return std::nullopt;
-  auto b = std::prev(end);
-  auto a = b;
-  while (a != odom_history_.begin() && a->stamp > b->stamp - params_.odom_speed_window)
-  {
-    auto prev = std::prev(a);
-    if (a->stamp - prev->stamp > 0.5)
-      return std::nullopt;
-    a = prev;
-  }
-  double dt = b->stamp - a->stamp;
-  if (dt < 0.5 * params_.odom_speed_window)
-    return std::nullopt;
-  const Transform& tb = b->transform;
-  Vec3 d = { tb.t[0] - a->transform.t[0], tb.t[1] - a->transform.t[1], tb.t[2] - a->transform.t[2] };
-  Vec3 body = mul(transpose(tb.r), d);
-  stamp = b->stamp;
-  return Eigen::Vector3d(body[0] / dt, body[1] / dt, body[2] / dt);
-}
-
-void Rsf3dLocalization::update_speed(double t)
-{
-  double stamp;
-  auto velocity = odom_velocity(t, stamp);
-  if (!velocity || stamp - last_speed_update_ < params_.odom_speed_period)
-    return;
-  if (std::hypot(velocity->y(), velocity->z()) > params_.odom_max_lateral_speed ||
-      std::fabs(velocity->x()) > params_.odom_max_speed || t < restart_until_)
-    return;
-  last_speed_update_ = stamp;
-  double nis =
-      eskf_.update_forward_speed(velocity->x(), params_.odom_speed_sigma, params_.odom_speed_gate, odom_rejects_ >= 2);
-  odom_rejects_ = nis > 0.0 ? odom_rejects_ + 1 : 0;
 }
 
 void Rsf3dLocalization::update_gnss(double t)
@@ -711,13 +687,12 @@ void Rsf3dLocalization::update_gnss(double t)
     double nis = eskf_.update_position(sample.position, params_.gnss_lever, params_.gnss_sigma_xy, params_.gnss_sigma_z,
                                        params_.gnss_gate, gnss_rejects_ >= 2);
     gnss_rejects_ = nis > 0.0 ? gnss_rejects_ + 1 : 0;
-    RCLCPP_DEBUG(this->get_logger(), "gnss %.3f lag %.3f nis %.1f", t, t - sample.stamp, std::fabs(nis));
   }
 }
 
-std::vector<Point3f> Rsf3dLocalization::build_scan(const Transform& odom_base) const
+std::vector<Point3f> Rsf3dLocalization::build_scan(const Transform& frame_base) const
 {
-  Transform inv = inverse(odom_base);
+  Transform inv = inverse(frame_base);
   float r[9], o[3];
   for (int i = 0; i < 9; i++)
     r[i] = static_cast<float>(inv.r[i]);
@@ -801,12 +776,12 @@ void Rsf3dLocalization::update_from_particles(const ParticleEstimate& estimate, 
   }
 }
 
-void Rsf3dLocalization::update_particles(double t, const Transform& odom_base)
+void Rsf3dLocalization::update_particles(double t)
 {
   Transform current = eskf_.pose();
   if (!update_due(to_pose(compose(inverse(last_update_pose_), current)), t - last_update_time_))
     return;
-  std::vector<Point3f> scan = build_scan(odom_base);
+  std::vector<Point3f> scan = build_scan(shadow_);
   if (scan.empty())
     return;
   particles_.predict(compose(inverse(particle_shadow_), shadow_), t - last_update_time_, params_.motion);
@@ -822,8 +797,6 @@ void Rsf3dLocalization::update_particles(double t, const Transform& odom_base)
   last_update_time_ = t;
   last_update_pose_ = eskf_.pose();
   publish_particles(rclcpp::Time(static_cast<int64_t>(t * 1e9), this->get_clock()->get_clock_type()));
-  RCLCPP_DEBUG(this->get_logger(), "scan %.3f alpha %.3f mass %.2f rejects %d speed %.2f", t, alpha, estimate.mass,
-               rejects_, eskf_.forward_speed());
 }
 
 void Rsf3dLocalization::publish_particles(const rclcpp::Time& stamp)

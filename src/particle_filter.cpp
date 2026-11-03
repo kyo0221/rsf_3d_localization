@@ -38,9 +38,16 @@ std::array<double, 256> hit_table(double max_distance, double sigma)
   return table;
 }
 
+std::array<double, 256> log_table(double max_distance, double sigma, double random_ratio)
+{
+  std::array<double, 256> hit = hit_table(max_distance, sigma);
+  for (auto& h : hit)
+    h = std::log((1.0 - random_ratio) * h + random_ratio);
+  return hit;
+}
+
 void scan_range(const LikelihoodField& field, const std::vector<Point3f>& scan, const std::vector<Transform>& poses,
-                const std::array<double, 256>& hit, double random_ratio, size_t begin, size_t end,
-                std::vector<double>& log_sum, std::vector<double>& hit_mean)
+                const std::array<double, 256>& table, size_t begin, size_t end, std::vector<double>& log_sum)
 {
   for (size_t i = begin; i < end; i++)
   {
@@ -50,18 +57,15 @@ void scan_range(const LikelihoodField& field, const std::vector<Point3f>& scan, 
       r[k] = static_cast<float>(t.r[static_cast<size_t>(k)]);
     for (int k = 0; k < 3; k++)
       o[k] = static_cast<float>(t.t[static_cast<size_t>(k)]);
-    double sum = 0.0, hits = 0.0;
+    double sum = 0.0;
     for (const auto& p : scan)
     {
       float x = r[0] * p.x + r[1] * p.y + r[2] * p.z + o[0];
       float y = r[3] * p.x + r[4] * p.y + r[5] * p.z + o[1];
       float z = r[6] * p.x + r[7] * p.y + r[8] * p.z + o[2];
-      double h = hit[field.level(x, y, z)];
-      hits += h;
-      sum += std::log((1.0 - random_ratio) * h + random_ratio);
+      sum += table[field.level(x, y, z)];
     }
     log_sum[i] = sum;
-    hit_mean[i] = hits / static_cast<double>(std::max<size_t>(scan.size(), 1));
   }
 }
 
@@ -178,30 +182,29 @@ void ParticleFilter::apply_log_weights(std::vector<double>& log_weights)
     w /= total;
 }
 
-double ParticleFilter::weight_scan(const LikelihoodField& field, const std::vector<Point3f>& scan,
-                                   const ScanModel& model)
+void ParticleFilter::weight_scan(const LikelihoodField& field, const std::vector<Point3f>& scan, const ScanModel& model)
 {
   if (scan.empty() || poses_.empty())
-    return 0.0;
-  auto hit = hit_table(field.max_distance(), model.sigma);
-  std::vector<double> log_sum(poses_.size()), hit_mean(poses_.size());
+    return;
+  auto table = log_table(field.max_distance(), model.sigma, model.random_ratio);
+  std::vector<double> log_sum(poses_.size());
   size_t workers = static_cast<size_t>(std::max(1, model.threads));
   size_t chunk = (poses_.size() + workers - 1) / workers;
   std::vector<std::thread> pool;
-  for (size_t w = 0; w < workers; w++)
+  for (size_t w = 1; w < workers; w++)
   {
     size_t begin = w * chunk, end = std::min(poses_.size(), begin + chunk);
     if (begin < end)
-      pool.emplace_back(scan_range, std::cref(field), std::cref(scan), std::cref(poses_), std::cref(hit),
-                        model.random_ratio, begin, end, std::ref(log_sum), std::ref(hit_mean));
+      pool.emplace_back(scan_range, std::cref(field), std::cref(scan), std::cref(poses_), std::cref(table), begin, end,
+                        std::ref(log_sum));
   }
+  scan_range(field, scan, poses_, table, 0, std::min(poses_.size(), chunk), log_sum);
   for (auto& t : pool)
     t.join();
   double scale = model.effective_points / static_cast<double>(scan.size());
   for (auto& v : log_sum)
     v *= scale;
   apply_log_weights(log_sum);
-  return *std::max_element(hit_mean.begin(), hit_mean.end());
 }
 
 void ParticleFilter::weight_position(const Vec3& measured, const Vec3& lever, double sigma_xy, double sigma_z,

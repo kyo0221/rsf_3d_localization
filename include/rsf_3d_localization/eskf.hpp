@@ -28,7 +28,7 @@ struct EskfNoise
   double gyro = 0.01;
   double gyro_bias = 1e-4;
   double acc_bias = 1e-3;
-  double odom_scale = 0.002;
+  double wheel_scale = 0.002;
 };
 
 class Eskf
@@ -54,7 +54,7 @@ private:
   Eigen::Matrix3d r_ = Eigen::Matrix3d::Identity();
   Eigen::Vector3d gyro_bias_ = Eigen::Vector3d::Zero();
   Eigen::Vector3d acc_bias_ = Eigen::Vector3d::Zero();
-  double odom_scale_ = 1.0;
+  double wheel_scale_ = 1.0;
   Cov cov_ = Cov::Identity();
 
   template <int M>

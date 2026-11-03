@@ -70,7 +70,7 @@ void Eskf::reset(const Transform& pose, double speed)
   v_ = r_ * Vector3d(speed, 0.0, 0.0);
   gyro_bias_.setZero();
   acc_bias_.setZero();
-  odom_scale_ = 1.0;
+  wheel_scale_ = 1.0;
   cov_.setZero();
   cov_.block<2, 2>(0, 0) = Eigen::Matrix2d::Identity() * 0.25;
   cov_(2, 2) = 0.04;
@@ -100,7 +100,7 @@ void Eskf::predict(const Vector3d& gyro, const Vector3d& acc, double dt, const E
   q.block<3, 3>(6, 6) = Matrix3d::Identity() * noise.gyro * noise.gyro * dt;
   q.block<3, 3>(9, 9) = Matrix3d::Identity() * noise.gyro_bias * noise.gyro_bias * dt;
   q.block<3, 3>(12, 12) = Matrix3d::Identity() * noise.acc_bias * noise.acc_bias * dt;
-  q(15, 15) = noise.odom_scale * noise.odom_scale * dt;
+  q(15, 15) = noise.wheel_scale * noise.wheel_scale * dt;
   cov_ = f * cov_ * f.transpose() + q;
 }
 
@@ -124,7 +124,7 @@ double Eskf::correct(const Eigen::Matrix<double, M, kDim>& h, const Eigen::Matri
   r_ = r_ * exp_so3(dx.template segment<3>(6));
   gyro_bias_ += dx.template segment<3>(9);
   acc_bias_ += dx.template segment<3>(12);
-  odom_scale_ += dx(15);
+  wheel_scale_ += dx(15);
   Cov ikh = Cov::Identity() - k * h;
   cov_ = ikh * cov_ * ikh.transpose() + k * noise * k.transpose();
   return -nis;
@@ -134,11 +134,11 @@ double Eskf::update_forward_speed(double speed, double sigma, double gate, bool 
 {
   Eigen::Matrix<double, 1, kDim> h = Eigen::Matrix<double, 1, kDim>::Zero();
   Vector3d body = r_.transpose() * v_;
-  h.block<1, 3>(0, 3) = odom_scale_ * r_.transpose().row(0);
-  h.block<1, 3>(0, 6) = odom_scale_ * skew(body).row(0);
+  h.block<1, 3>(0, 3) = wheel_scale_ * r_.transpose().row(0);
+  h.block<1, 3>(0, 6) = wheel_scale_ * skew(body).row(0);
   h(0, 15) = body.x();
   Eigen::Matrix<double, 1, 1> residual, noise;
-  residual << speed - odom_scale_ * body.x();
+  residual << speed - wheel_scale_ * body.x();
   noise << sigma * sigma;
   return correct<1>(h, residual, noise, gate, inflate);
 }
