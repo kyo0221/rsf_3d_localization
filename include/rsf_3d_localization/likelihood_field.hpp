@@ -56,8 +56,6 @@ public:
     return blocks_[static_cast<size_t>(index)][static_cast<size_t>(local)];
   }
 
-  double distance(float x, float y, float z) const;
-
 private:
   float origin_[3] = { 0.0f, 0.0f, 0.0f };
   float inv_resolution_ = 1.0f;

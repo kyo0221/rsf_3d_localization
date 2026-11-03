@@ -105,3 +105,56 @@ TEST(ParticleFilter, ResampleKeepsCountAndInjectReplaces)
   pf.inject(to_transform(Pose6{ 20.0, 0.0, 0.0, 0.0, 0.0, 0.0 }), 0.3, PoseSpread{ 0.1, 0.0, 0.0, 0.0 });
   EXPECT_NEAR(pf.mass_near({ 20.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0 }, 1.0), 0.3, 0.01);
 }
+
+TEST(ParticleFilter, UniformYawResetCoversAllHeadings)
+{
+  ParticleFilter pf;
+  pf.reset_uniform_yaw(to_transform(Pose6{ 3.0, -2.0, 1.0, 0.0, 0.0, 0.7 }), 720, PoseSpread{ 0.5, 0.1, 0.0, 0.0 },
+                       11U);
+  EXPECT_EQ(pf.size(), 720U);
+  int bins[8] = {};
+  double sx = 0.0, sy = 0.0;
+  for (const auto& t : pf.poses())
+  {
+    Pose6 p = to_pose(t);
+    bins[static_cast<int>(std::floor((p.yaw + M_PI) / (M_PI / 4.0))) % 8]++;
+    sx += p.x, sy += p.y;
+  }
+  for (int b : bins)
+    EXPECT_NEAR(b, 90, 15);
+  EXPECT_NEAR(sx / 720.0, 3.0, 0.1);
+  EXPECT_NEAR(sy / 720.0, -2.0, 0.1);
+  EXPECT_LT(pf.yaw_concentration(), 0.1);
+}
+
+TEST(ParticleFilter, YawConcentrationIsHighForNarrowHeadings)
+{
+  ParticleFilter pf;
+  pf.reset(to_transform(Pose6{ 0.0, 0.0, 0.0, 0.0, 0.0, 3.1 }), 500, PoseSpread{ 0.5, 0.0, 0.0, 0.05 }, 13U);
+  EXPECT_GT(pf.yaw_concentration(), 0.99);
+}
+
+TEST(ParticleFilter, UniformYawConvergesToTrueHeadingWithScans)
+{
+  std::vector<Point3f> map = make_room();
+  LikelihoodField field;
+  field.build(map, 0.1, 1.0, 2);
+  Pose6 truth{ 0.3, -0.2, 0.0, 0.0, 0.0, 2.6 };
+  std::vector<Point3f> scan = scan_from(map, truth);
+  ParticleFilter pf;
+  pf.reset_uniform_yaw(to_transform(Pose6{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 }), 2000, PoseSpread{ 0.5, 0.02, 0.0, 0.0 },
+                       17U);
+  ScanModel model;
+  model.sigma = 0.15;
+  for (int i = 0; i < 8; i++)
+  {
+    pf.weight_scan(field, scan, model);
+    pf.resample(0.5);
+    pf.predict(to_transform(Pose6{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 }), 0.0, MotionNoise{});
+  }
+  Pose6 e = to_pose(pf.estimate(1.0).pose);
+  EXPECT_NEAR(e.x, truth.x, 0.15);
+  EXPECT_NEAR(e.y, truth.y, 0.15);
+  EXPECT_NEAR(rsf_3d_localization::normalize_angle(e.yaw - truth.yaw), 0.0, 0.05);
+  EXPECT_GT(pf.yaw_concentration(), 0.99);
+}

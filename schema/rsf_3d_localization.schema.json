@@ -166,6 +166,30 @@
             "type": "number"
           }
         },
+        "gnss_initialize": {
+          "type": "boolean",
+          "description": "Initialize from the first RTK fix with particles spread over all headings instead of initial_pose_*.",
+          "default": true
+        },
+        "gnss_init_particle_count": {
+          "type": "integer",
+          "description": "Number of particles used while searching the initial heading.",
+          "default": 3000,
+          "minimum": 1
+        },
+        "gnss_init_concentration": {
+          "type": "number",
+          "description": "Weighted mean resultant length of particle yaw required to finish GNSS initialization.",
+          "default": 0.995,
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "gnss_init_min_updates": {
+          "type": "integer",
+          "description": "Minimum particle updates before GNSS initialization can finish.",
+          "default": 5,
+          "minimum": 1
+        },
         "motion_along": {
           "type": "number",
           "description": "Along-track motion noise per travelled metre.",
@@ -620,6 +644,10 @@
         "particle_count",
         "particle_threads",
         "initial_spread",
+        "gnss_initialize",
+        "gnss_init_particle_count",
+        "gnss_init_concentration",
+        "gnss_init_min_updates",
         "motion_along",
         "motion_along_time",
         "motion_lateral",

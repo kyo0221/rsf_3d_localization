@@ -47,7 +47,6 @@ public:
 
   Transform pose() const;
   double forward_speed() const;
-  double position_variance() const;
 
 private:
   Eigen::Vector3d p_ = Eigen::Vector3d::Zero();

@@ -194,9 +194,4 @@ double Eskf::forward_speed() const
   return (r_.transpose() * v_).x();
 }
 
-double Eskf::position_variance() const
-{
-  return std::max(cov_(0, 0), cov_(1, 1));
-}
-
 }  // namespace rsf_3d_localization

@@ -212,9 +212,4 @@ size_t LikelihoodField::block_count() const
   return blocks_.size();
 }
 
-double LikelihoodField::distance(float x, float y, float z) const
-{
-  return level(x, y, z) * max_distance_ / 255.0;
-}
-
 }  // namespace rsf_3d_localization

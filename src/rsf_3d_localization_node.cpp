@@ -88,6 +88,12 @@ Vec3 to_vec(const Eigen::Vector3d& v)
   return { v.x(), v.y(), v.z() };
 }
 
+void level_with_gravity(Pose6& pose, const Eigen::Vector3d& acc)
+{
+  pose.roll = std::atan2(acc.y(), acc.z());
+  pose.pitch = std::atan2(-acc.x(), std::hypot(acc.y(), acc.z()));
+}
+
 }  // namespace
 
 Rsf3dLocalization::Rsf3dLocalization(const rclcpp::NodeOptions& options) : Node("rsf_3d_localization", options)
@@ -95,7 +101,8 @@ Rsf3dLocalization::Rsf3dLocalization(const rclcpp::NodeOptions& options) : Node(
   init_param();
   init_interfaces();
   load_map();
-  pending_pose_ = params_.initial_pose;
+  if (!params_.gnss_initialize)
+    pending_pose_ = params_.initial_pose;
 }
 
 void Rsf3dLocalization::init_param()
@@ -141,6 +148,10 @@ void Rsf3dLocalization::init_particle_param()
 {
   params_.particle_count = this->declare_parameter<int>("particle_count");
   params_.initial_spread = to_spread(this->declare_parameter<std::vector<double>>("initial_spread"));
+  params_.gnss_initialize = this->declare_parameter<bool>("gnss_initialize");
+  params_.gnss_init_particle_count = this->declare_parameter<int>("gnss_init_particle_count");
+  params_.gnss_init_concentration = this->declare_parameter<double>("gnss_init_concentration");
+  params_.gnss_init_min_updates = this->declare_parameter<int>("gnss_init_min_updates");
   params_.motion.along = this->declare_parameter<double>("motion_along");
   params_.motion.along_time = this->declare_parameter<double>("motion_along_time");
   params_.motion.lateral = this->declare_parameter<double>("motion_lateral");
@@ -414,7 +425,13 @@ void Rsf3dLocalization::process_scans()
     if (pending_pose_ && !initialize(scan.stamp))
       continue;
     if (!initialized_)
+    {
+      if (searching_)
+        step_search(scan.stamp, scan.transform);
+      else if (params_.gnss_initialize)
+        start_search(scan.stamp, scan.transform);
       continue;
+    }
     advance(scan.stamp);
     update_particles(scan.stamp, scan.transform);
     update_output(scan.stamp);
@@ -459,17 +476,92 @@ void Rsf3dLocalization::accumulate_cloud(const sensor_msgs::msg::PointCloud2& ms
   clouds_.push_back(std::move(cloud));
 }
 
-bool Rsf3dLocalization::initialize(double t)
+std::optional<Eigen::Vector3d> Rsf3dLocalization::mean_acc() const
 {
   if (imu_recent_.size() < 50)
-    return false;
+    return std::nullopt;
   Eigen::Vector3d acc = Eigen::Vector3d::Zero();
   for (const auto& s : imu_recent_)
     acc += s.acc;
-  acc /= static_cast<double>(imu_recent_.size());
+  return Eigen::Vector3d(acc / static_cast<double>(imu_recent_.size()));
+}
+
+void Rsf3dLocalization::start_search(double t, const Transform& odom_base)
+{
+  auto acc = mean_acc();
+  if (!acc)
+    return;
+  std::optional<GnssSample> latest;
+  while (!gnss_queue_.empty() && gnss_queue_.front().stamp <= t)
+  {
+    if (gnss_queue_.front().fix)
+      latest = gnss_queue_.front();
+    gnss_queue_.pop_front();
+  }
+  if (!latest)
+  {
+    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000, "waiting for gnss fix to initialize");
+    return;
+  }
+  Pose6 center;
+  center.x = latest->position.x();
+  center.y = latest->position.y();
+  center.z = ground_height(center.x, center.y).value_or(latest->position.z());
+  level_with_gravity(center, *acc);
+  particles_.reset_uniform_yaw(to_transform(center), params_.gnss_init_particle_count, params_.initial_spread, 1U);
+  search_odom_ = odom_base;
+  search_time_ = t;
+  search_updates_ = 0;
+  searching_ = true;
+  RCLCPP_INFO(this->get_logger(), "gnss initialization started at %.2f %.2f", center.x, center.y);
+}
+
+void Rsf3dLocalization::step_search(double t, const Transform& odom_base)
+{
+  Transform delta = compose(inverse(search_odom_), odom_base);
+  if (!update_due(to_pose(delta), t - search_time_))
+    return;
+  std::vector<Point3f> scan = build_scan(odom_base);
+  if (scan.empty())
+    return;
+  particles_.predict(delta, t - search_time_, params_.motion);
+  search_odom_ = odom_base;
+  search_time_ = t;
+  particles_.weight_scan(field_, scan, params_.scan);
+  Vec3 lever = to_vec(params_.gnss_lever);
+  for (; !gnss_queue_.empty() && gnss_queue_.front().stamp <= t; gnss_queue_.pop_front())
+  {
+    const GnssSample& sample = gnss_queue_.front();
+    if (sample.fix)
+      particles_.weight_position(to_vec(sample.position), lever, params_.particle_fix_sigma_xy,
+                                 params_.particle_fix_sigma_z, params_.particle_fix_outlier);
+  }
+  particles_.resample(params_.resample_ratio);
+  publish_particles(rclcpp::Time(static_cast<int64_t>(t * 1e9), this->get_clock()->get_clock_type()));
+  ParticleEstimate estimate = particles_.estimate(params_.cluster_radius);
+  if (++search_updates_ < params_.gnss_init_min_updates ||
+      particles_.yaw_concentration() < params_.gnss_init_concentration || estimate.mass < params_.mass_threshold)
+    return;
+  Pose6 pose = to_pose(estimate.pose);
+  RCLCPP_INFO(this->get_logger(), "gnss initialization converged at %.2f %.2f yaw %.3f after %d updates", pose.x,
+              pose.y, pose.yaw, search_updates_);
+  pending_pose_ = pose;
+  initialize(t);
+}
+
+bool Rsf3dLocalization::update_due(const Pose6& moved, double dt) const
+{
+  return std::hypot(moved.x, moved.y) >= params_.update_min_d || std::fabs(moved.yaw) >= params_.update_min_a ||
+         dt >= params_.update_max_dt;
+}
+
+bool Rsf3dLocalization::initialize(double t)
+{
+  auto acc = mean_acc();
+  if (!acc)
+    return false;
   Pose6 pose = *pending_pose_;
-  pose.roll = std::atan2(acc.y(), acc.z());
-  pose.pitch = std::atan2(-acc.x(), std::hypot(acc.y(), acc.z()));
+  level_with_gravity(pose, *acc);
   auto ground = ground_height(pose.x, pose.y);
   if (std::fabs(pose.z) < 1e-6 && ground)
     pose.z = *ground;
@@ -493,6 +585,7 @@ bool Rsf3dLocalization::initialize(double t)
   restart_until_ = -1e18;
   has_output_ = false;
   initialized_ = true;
+  searching_ = false;
   pending_pose_.reset();
   return true;
 }
@@ -711,9 +804,7 @@ void Rsf3dLocalization::update_from_particles(const ParticleEstimate& estimate, 
 void Rsf3dLocalization::update_particles(double t, const Transform& odom_base)
 {
   Transform current = eskf_.pose();
-  Pose6 moved = to_pose(compose(inverse(last_update_pose_), current));
-  if (std::hypot(moved.x, moved.y) < params_.update_min_d && std::fabs(moved.yaw) < params_.update_min_a &&
-      t - last_update_time_ < params_.update_max_dt)
+  if (!update_due(to_pose(compose(inverse(last_update_pose_), current)), t - last_update_time_))
     return;
   std::vector<Point3f> scan = build_scan(odom_base);
   if (scan.empty())

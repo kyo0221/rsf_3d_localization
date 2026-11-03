@@ -80,6 +80,9 @@ struct Params
   double field_resolution, field_max_distance;
   int field_threads, particle_count, max_points;
   Pose6 initial_pose;
+  bool gnss_initialize;
+  int gnss_init_particle_count, gnss_init_min_updates;
+  double gnss_init_concentration;
   PoseSpread initial_spread, fix_reset_spread, expand_spread;
   MotionNoise motion;
   ScanModel scan;
@@ -128,6 +131,10 @@ private:
   std::deque<StampedTransform> odom_history_, scan_queue_;
   std::optional<Pose6> pending_pose_;
   bool initialized_ = false;
+  bool searching_ = false;
+  Transform search_odom_;
+  double search_time_ = 0.0;
+  int search_updates_ = 0;
   long imu_count_ = 0;
   double filter_time_ = 0.0;
   Eigen::Vector3d last_gyro_ = Eigen::Vector3d::Zero(), last_acc_ = Eigen::Vector3d::Zero();
@@ -175,6 +182,10 @@ private:
   void process_scans();
   void accumulate_cloud(const sensor_msgs::msg::PointCloud2& msg, const Transform& odom_sensor, double t);
   bool initialize(double t);
+  std::optional<Eigen::Vector3d> mean_acc() const;
+  void start_search(double t, const Transform& odom_base);
+  void step_search(double t, const Transform& odom_base);
+  bool update_due(const Pose6& moved, double dt) const;
   void advance(double t);
   void predict_step(const Eigen::Vector3d& gyro, const Eigen::Vector3d& acc, double t, double dt);
   void track_restart(double dt);

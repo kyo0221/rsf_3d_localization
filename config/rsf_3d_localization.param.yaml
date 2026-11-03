@@ -27,6 +27,10 @@
     particle_count: 1000
     particle_threads: 4
     initial_spread: [0.5, 0.1, 0.01, 0.05]
+    gnss_initialize: true
+    gnss_init_particle_count: 3000
+    gnss_init_concentration: 0.995
+    gnss_init_min_updates: 5
     motion_along: 0.1
     motion_along_time: 0.4
     motion_lateral: 0.05

@@ -70,56 +70,6 @@ inline Mat3 transpose(const Mat3& a)
   return { a[0], a[3], a[6], a[1], a[4], a[7], a[2], a[5], a[8] };
 }
 
-inline void jacobi_rotate(Mat3& m, Mat3& vectors, int p, int q)
-{
-  double apq = m[p * 3 + q];
-  if (std::fabs(apq) < 1e-300)
-    return;
-  double theta = (m[q * 3 + q] - m[p * 3 + p]) / (2.0 * apq);
-  double t = (theta >= 0 ? 1.0 : -1.0) / (std::fabs(theta) + std::sqrt(theta * theta + 1.0));
-  double c = 1.0 / std::sqrt(t * t + 1.0);
-  double s = t * c;
-  for (int k = 0; k < 3; k++)
-  {
-    double mkp = m[k * 3 + p];
-    double mkq = m[k * 3 + q];
-    m[k * 3 + p] = c * mkp - s * mkq;
-    m[k * 3 + q] = s * mkp + c * mkq;
-  }
-  for (int k = 0; k < 3; k++)
-  {
-    double mpk = m[p * 3 + k];
-    double mqk = m[q * 3 + k];
-    m[p * 3 + k] = c * mpk - s * mqk;
-    m[q * 3 + k] = s * mpk + c * mqk;
-  }
-  for (int k = 0; k < 3; k++)
-  {
-    double vkp = vectors[k * 3 + p];
-    double vkq = vectors[k * 3 + q];
-    vectors[k * 3 + p] = c * vkp - s * vkq;
-    vectors[k * 3 + q] = s * vkp + c * vkq;
-  }
-}
-
-inline void eigen_symmetric(const Mat3& a, Vec3& values, Mat3& vectors)
-{
-  Mat3 m = a;
-  vectors = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
-  for (int sweep = 0; sweep < 50; sweep++)
-  {
-    double off = m[1] * m[1] + m[2] * m[2] + m[5] * m[5];
-    if (off < 1e-30)
-      break;
-    for (int p = 0; p < 2; p++)
-    {
-      for (int q = p + 1; q < 3; q++)
-        jacobi_rotate(m, vectors, p, q);
-    }
-  }
-  values = { m[0], m[4], m[8] };
-}
-
 inline Mat3 rotation_from_rpy(double roll, double pitch, double yaw)
 {
   double cr = std::cos(roll), sr = std::sin(roll);

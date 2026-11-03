@@ -67,6 +67,7 @@ class ParticleFilter
 {
 public:
   void reset(const Transform& center, int count, const PoseSpread& spread, uint32_t seed);
+  void reset_uniform_yaw(const Transform& center, int count, const PoseSpread& spread, uint32_t seed);
   void predict(const Transform& delta, double dt, const MotionNoise& noise);
   double weight_scan(const LikelihoodField& field, const std::vector<Point3f>& scan, const ScanModel& model);
   void weight_position(const Vec3& measured, const Vec3& lever, double sigma_xy, double sigma_z, double outlier);
@@ -77,6 +78,7 @@ public:
   ParticleEstimate estimate_around(const Transform& center, double radius, const std::vector<double>& weights) const;
   double score(const LikelihoodField& field, const std::vector<Point3f>& scan, const Transform& pose,
                double sigma) const;
+  double yaw_concentration() const;
   size_t size() const;
   const std::vector<Transform>& poses() const;
   const std::vector<double>& weights() const;

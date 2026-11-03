@@ -115,6 +115,22 @@ void ParticleFilter::reset(const Transform& center, int count, const PoseSpread&
     poses_[i] = sample(center, spread);
 }
 
+void ParticleFilter::reset_uniform_yaw(const Transform& center, int count, const PoseSpread& spread, uint32_t seed)
+{
+  rng_.seed(seed);
+  size_t n = static_cast<size_t>(std::max(count, 1));
+  std::uniform_real_distribution<double> jitter(0.0, 1.0);
+  Pose6 c = to_pose(center);
+  poses_.resize(n);
+  weights_.assign(n, 1.0 / static_cast<double>(n));
+  for (size_t i = 0; i < n; i++)
+  {
+    Pose6 p = to_pose(sample(center, spread));
+    p.yaw = normalize_angle(c.yaw + 2.0 * M_PI * (static_cast<double>(i) + jitter(rng_)) / static_cast<double>(n));
+    poses_[i] = to_transform(p);
+  }
+}
+
 Transform ParticleFilter::sample(const Transform& center, const PoseSpread& spread)
 {
   std::normal_distribution<double> n(0.0, 1.0);
@@ -337,6 +353,18 @@ double ParticleFilter::score(const LikelihoodField& field, const std::vector<Poi
     hits += hit[field.level(static_cast<float>(q[0]), static_cast<float>(q[1]), static_cast<float>(q[2]))];
   }
   return hits / static_cast<double>(scan.size());
+}
+
+double ParticleFilter::yaw_concentration() const
+{
+  double c = 0.0, s = 0.0;
+  for (size_t i = 0; i < poses_.size(); i++)
+  {
+    double yaw = std::atan2(poses_[i].r[3], poses_[i].r[0]);
+    c += weights_[i] * std::cos(yaw);
+    s += weights_[i] * std::sin(yaw);
+  }
+  return std::hypot(c, s);
 }
 
 size_t ParticleFilter::size() const

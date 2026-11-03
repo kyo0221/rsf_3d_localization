@@ -33,6 +33,11 @@ std::vector<Point3f> make_plane()
   return points;
 }
 
+double distance(const LikelihoodField& field, float x, float y, float z)
+{
+  return field.level(x, y, z) * field.max_distance() / 255.0;
+}
+
 }  // namespace
 
 TEST(LikelihoodField, DistanceToPlane)
@@ -40,15 +45,15 @@ TEST(LikelihoodField, DistanceToPlane)
   LikelihoodField field;
   field.build(make_plane(), 0.1, 1.0, 2);
   ASSERT_FALSE(field.empty());
-  EXPECT_NEAR(field.distance(0.0f, 0.0f, 0.05f), 0.0, 0.02);
-  EXPECT_NEAR(field.distance(0.0f, 0.0f, 0.45f), 0.4, 0.02);
-  EXPECT_NEAR(field.distance(1.0f, -2.0f, -0.65f), 0.7, 0.02);
+  EXPECT_NEAR(distance(field, 0.0f, 0.0f, 0.05f), 0.0, 0.02);
+  EXPECT_NEAR(distance(field, 0.0f, 0.0f, 0.45f), 0.4, 0.02);
+  EXPECT_NEAR(distance(field, 1.0f, -2.0f, -0.65f), 0.7, 0.02);
 }
 
 TEST(LikelihoodField, FarPointsAreTruncated)
 {
   LikelihoodField field;
   field.build(make_plane(), 0.1, 1.0, 2);
-  EXPECT_DOUBLE_EQ(field.distance(0.0f, 0.0f, 3.0f), 1.0);
-  EXPECT_DOUBLE_EQ(field.distance(100.0f, 0.0f, 0.0f), 1.0);
+  EXPECT_DOUBLE_EQ(distance(field, 0.0f, 0.0f, 3.0f), 1.0);
+  EXPECT_DOUBLE_EQ(distance(field, 100.0f, 0.0f, 0.0f), 1.0);
 }
