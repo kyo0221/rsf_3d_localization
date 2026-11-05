@@ -20,6 +20,8 @@
     update_min_d: 0.25
     update_min_a: 0.2
     update_max_dt: 1.0
+    update_still_d: 0.02 # 車輪でこれ未満, かつジャイロで update_still_a 未満しか動いていなければ止まっているとして粒子を更新しない (emcl2)
+    update_still_a: 0.01
     alpha_threshold: 0.3
     pose_gate: 40.0
     information_min_gain: 0.05
@@ -40,6 +42,14 @@
     motion_tilt: 0.003
     motion_xy_floor: 0.02
     motion_yaw_floor: 0.005
+    # 初期化後の粒子の移動: 並進は車輪, 回転はジャイロ. 分散を距離 [m] と回転 [rad] に比例させる (emcl 方式)
+    odom_noise_ff: 0.08 # 進行方向 [m^2/m]
+    odom_noise_fr: 0.001 # 進行方向 [m^2/rad]
+    odom_noise_fl: 0.004 # 横方向 [m^2/m]
+    odom_noise_rf: 0.0004 # yaw [rad^2/m]
+    odom_noise_rr: 0.001 # yaw [rad^2/rad]
+    odom_noise_vertical: 0.0006 # 高さ [m^2/m]
+    odom_noise_tilt: 0.00004 # roll, pitch [rad^2/m]
     scan_sigma: 0.2
     scan_random_ratio: 0.1
     scan_effective_points: 30.0

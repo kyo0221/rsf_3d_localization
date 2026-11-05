@@ -109,6 +109,18 @@
           "description": "Maximum time between scan updates [s].",
           "default": 1.0
         },
+        "update_still_d": {
+          "type": "number",
+          "description": "Below this wheel travel [m] (and update_still_a) the robot is treated as stationary and particles are not updated.",
+          "default": 0.02,
+          "minimum": 0.0
+        },
+        "update_still_a": {
+          "type": "number",
+          "description": "Below this gyro rotation [rad] (and update_still_d) the robot is treated as stationary.",
+          "default": 0.01,
+          "minimum": 0.0
+        },
         "alpha_threshold": {
           "type": "number",
           "description": "Minimum mean point likelihood at the estimate to update the ESKF.",
@@ -242,6 +254,48 @@
           "type": "number",
           "description": "Minimum yaw motion noise per update [rad].",
           "default": 0.005,
+          "minimum": 0.0
+        },
+        "odom_noise_ff": {
+          "type": "number",
+          "description": "Along-track variance per wheel travel [m^2/m] after initialization.",
+          "default": 0.08,
+          "minimum": 0.0
+        },
+        "odom_noise_fr": {
+          "type": "number",
+          "description": "Along-track variance per gyro rotation [m^2/rad].",
+          "default": 0.001,
+          "minimum": 0.0
+        },
+        "odom_noise_fl": {
+          "type": "number",
+          "description": "Lateral variance per wheel travel [m^2/m].",
+          "default": 0.004,
+          "minimum": 0.0
+        },
+        "odom_noise_rf": {
+          "type": "number",
+          "description": "Yaw variance per wheel travel [rad^2/m].",
+          "default": 0.0004,
+          "minimum": 0.0
+        },
+        "odom_noise_rr": {
+          "type": "number",
+          "description": "Yaw variance per gyro rotation [rad^2/rad].",
+          "default": 0.001,
+          "minimum": 0.0
+        },
+        "odom_noise_vertical": {
+          "type": "number",
+          "description": "Vertical variance per wheel travel [m^2/m].",
+          "default": 0.0006,
+          "minimum": 0.0
+        },
+        "odom_noise_tilt": {
+          "type": "number",
+          "description": "Roll and pitch variance per wheel travel [rad^2/m].",
+          "default": 4e-05,
           "minimum": 0.0
         },
         "scan_sigma": {
@@ -614,6 +668,8 @@
         "update_min_d",
         "update_min_a",
         "update_max_dt",
+        "update_still_d",
+        "update_still_a",
         "alpha_threshold",
         "pose_gate",
         "information_min_gain",
@@ -634,6 +690,13 @@
         "motion_tilt",
         "motion_xy_floor",
         "motion_yaw_floor",
+        "odom_noise_ff",
+        "odom_noise_fr",
+        "odom_noise_fl",
+        "odom_noise_rf",
+        "odom_noise_rr",
+        "odom_noise_vertical",
+        "odom_noise_tilt",
         "scan_sigma",
         "scan_random_ratio",
         "scan_effective_points",

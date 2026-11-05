@@ -86,7 +86,9 @@ struct Params
   int gnss_init_particle_count, gnss_init_min_updates;
   double gnss_init_concentration;
   PoseSpread initial_spread, fix_reset_spread, expand_spread;
-  MotionNoise motion;
+  MotionNoise motion;  // 初期化の探索中 (停止中も時間で更新する)
+  OdomNoise odom_noise;  // 初期化後: 車輪の距離とジャイロの回転に比例する emcl 方式
+  double update_still_d, update_still_a;
   ScanModel scan;
   double map_visualization_voxel_size;
   double range_min, range_max, scan_accumulate_s, scan_voxel_size;
@@ -130,6 +132,8 @@ private:
   std::deque<PendingScan> scan_queue_;
   std::deque<double> wheel_speeds_;
   double wheel_received_ = -1e18;
+  double wheel_stamp_ = -1.0;
+  double wheel_distance_ = 0.0;  // 前回の粒子の更新からの車輪の走行距離
   std::optional<Pose6> pending_pose_;
   bool initialized_ = false;
   bool searching_ = false;
@@ -140,7 +144,6 @@ private:
   Eigen::Vector3d last_gyro_ = Eigen::Vector3d::Zero(), last_acc_ = Eigen::Vector3d::Zero();
   int rejects_ = 0, low_streak_ = 0, gnss_rejects_ = 0, fix_misses_ = 0, wheel_rejects_ = 0;
   double last_update_time_ = 0.0;
-  Transform last_update_pose_;
   double gnss_n_ = 0.0, gnss_m_ = 0.0;
 
   Transform shadow_, particle_shadow_, output_shadow_, output_;

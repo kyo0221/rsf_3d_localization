@@ -40,6 +40,43 @@ struct MotionNoise
   double yaw_floor = 0.005;
 };
 
+// 車輪の進んだ距離とジャイロの回転角による粒子の移動 (1 回の更新の間の量)
+struct OdomMotion
+{
+  double distance = 0.0;  // 車輪 (/icart/odom) で進んだ距離 [m]. 後退は負
+  double yaw = 0.0;       // ジャイロで回った角度 [rad]
+  double roll = 0.0;      // 坂での傾きの変化 [rad]
+  double pitch = 0.0;
+};
+
+// emcl と同じく分散を移動量に比例させる (止まっていれば粒子はばらまかない)
+struct OdomNoise
+{
+  double ff = 0.08;       // 進行方向の分散 / 距離 [m^2/m]
+  double fr = 0.001;      // 進行方向の分散 / 回転 [m^2/rad]
+  double fl = 0.004;      // 横方向の分散 / 距離 [m^2/m]
+  double rf = 0.0004;     // yaw の分散 / 距離 [rad^2/m]
+  double rr = 0.001;      // yaw の分散 / 回転 [rad^2/rad]
+  double vertical = 6e-4; // 高さの分散 / 距離 [m^2/m]
+  double tilt = 4e-5;     // roll, pitch の分散 / 距離 [rad^2/m]
+};
+
+struct OdomSigma
+{
+  double along, lateral, yaw;
+};
+
+OdomSigma odom_sigma(const OdomMotion& motion, const OdomNoise& noise);
+
+// 粒子を更新する条件. min_d / min_a だけ動いたら更新し, ゆっくり動くときは max_dt ごとにも更新する.
+// still_d / still_a 未満 (止まっている) の間は emcl2 と同じく更新しない (同じ観測で選び直して粒子が固まらないように)
+struct OdomUpdateRule
+{
+  double min_d, min_a, max_dt, still_d, still_a;
+};
+
+bool odom_update_due(const OdomMotion& moved, double dt, const OdomUpdateRule& rule);
+
 struct ScanModel
 {
   double sigma = 0.2;
@@ -69,6 +106,7 @@ public:
   void reset(const Transform& center, int count, const PoseSpread& spread, uint32_t seed);
   void reset_uniform_yaw(const Transform& center, int count, const PoseSpread& spread, uint32_t seed);
   void predict(const Transform& delta, double dt, const MotionNoise& noise);
+  void predict_odometry(const OdomMotion& motion, const OdomNoise& noise);
   void weight_scan(const LikelihoodField& field, const std::vector<Point3f>& scan, const ScanModel& model);
   void weight_position(const Vec3& measured, const Vec3& lever, double sigma_xy, double sigma_z, double outlier);
   double mass_near(const Vec3& measured, const Vec3& lever, double radius) const;

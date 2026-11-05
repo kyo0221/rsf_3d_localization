@@ -164,6 +164,33 @@ void ParticleFilter::predict(const Transform& delta, double dt, const MotionNois
   }
 }
 
+OdomSigma odom_sigma(const OdomMotion& motion, const OdomNoise& noise)
+{
+  double d = std::fabs(motion.distance), a = std::fabs(motion.yaw);
+  return { std::sqrt(noise.ff * d + noise.fr * a), std::sqrt(noise.fl * d), std::sqrt(noise.rf * d + noise.rr * a) };
+}
+
+bool odom_update_due(const OdomMotion& moved, double dt, const OdomUpdateRule& rule)
+{
+  double d = std::fabs(moved.distance), a = std::fabs(moved.yaw);
+  if (d >= rule.min_d || a >= rule.min_a)
+    return true;
+  return dt >= rule.max_dt && (d >= rule.still_d || a >= rule.still_a);
+}
+
+void ParticleFilter::predict_odometry(const OdomMotion& motion, const OdomNoise& noise)
+{
+  std::normal_distribution<double> n(0.0, 1.0);
+  OdomSigma s = odom_sigma(motion, noise);
+  double d = std::fabs(motion.distance), s_z = std::sqrt(noise.vertical * d), s_tilt = std::sqrt(noise.tilt * d);
+  for (auto& pose : poses_)
+  {
+    Pose6 step{ motion.distance + s.along * n(rng_), s.lateral * n(rng_),        s_z * n(rng_),
+                motion.roll + s_tilt * n(rng_),      motion.pitch + s_tilt * n(rng_), motion.yaw + s.yaw * n(rng_) };
+    pose = compose(pose, to_transform(step));
+  }
+}
+
 void ParticleFilter::apply_log_weights(std::vector<double>& log_weights)
 {
   double best = -1e300;

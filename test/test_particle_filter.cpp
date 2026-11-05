@@ -21,6 +21,9 @@
 
 using rsf_3d_localization::LikelihoodField;
 using rsf_3d_localization::MotionNoise;
+using rsf_3d_localization::odom_sigma;
+using rsf_3d_localization::OdomMotion;
+using rsf_3d_localization::OdomNoise;
 using rsf_3d_localization::ParticleFilter;
 using rsf_3d_localization::Point3f;
 using rsf_3d_localization::Pose6;
@@ -157,4 +160,104 @@ TEST(ParticleFilter, UniformYawConvergesToTrueHeadingWithScans)
   EXPECT_NEAR(e.y, truth.y, 0.15);
   EXPECT_NEAR(rsf_3d_localization::normalize_angle(e.yaw - truth.yaw), 0.0, 0.05);
   EXPECT_GT(pf.yaw_concentration(), 0.99);
+}
+
+namespace
+{
+
+// 粒子の位置・姿勢の平均と標準偏差 (x, y, yaw, pitch)
+struct Spread
+{
+  double mx, my, myaw, mpitch, sx, sy, syaw;
+};
+
+Spread spread_of(const ParticleFilter& pf)
+{
+  double n = static_cast<double>(pf.size()), mx = 0, my = 0, myaw = 0, mpitch = 0;
+  for (const auto& t : pf.poses())
+  {
+    Pose6 p = to_pose(t);
+    mx += p.x / n, my += p.y / n, myaw += p.yaw / n, mpitch += p.pitch / n;
+  }
+  double vx = 0, vy = 0, vyaw = 0;
+  for (const auto& t : pf.poses())
+  {
+    Pose6 p = to_pose(t);
+    vx += (p.x - mx) * (p.x - mx) / n, vy += (p.y - my) * (p.y - my) / n, vyaw += (p.yaw - myaw) * (p.yaw - myaw) / n;
+  }
+  return { mx, my, myaw, mpitch, std::sqrt(vx), std::sqrt(vy), std::sqrt(vyaw) };
+}
+
+ParticleFilter at(const Pose6& pose, int count = 4000)
+{
+  ParticleFilter pf;
+  pf.reset(to_transform(pose), count, PoseSpread{ 0.0, 0.0, 0.0, 0.0 }, 11U);
+  return pf;
+}
+
+}  // namespace
+
+TEST(OdomMotionModel, SigmaFollowsEmclVariancePerTravelAndRotation)
+{
+  OdomNoise noise;
+  noise.ff = 0.08, noise.fr = 0.01, noise.fl = 0.004, noise.rf = 0.0004, noise.rr = 0.002;
+  auto s = odom_sigma(OdomMotion{ -0.25, 0.2, 0.0, 0.0 }, noise);  // 後退でも移動量の絶対値で決まる
+  EXPECT_NEAR(s.along, std::sqrt(0.08 * 0.25 + 0.01 * 0.2), 1e-12);
+  EXPECT_NEAR(s.lateral, std::sqrt(0.004 * 0.25), 1e-12);
+  EXPECT_NEAR(s.yaw, std::sqrt(0.0004 * 0.25 + 0.002 * 0.2), 1e-12);
+}
+
+TEST(OdomMotionModel, StationaryRobotKeepsParticlesInPlace)
+{
+  // 止まっている間 (車輪もジャイロも 0) は粒子をばらまかない
+  ParticleFilter pf = at(Pose6{ 1.0, 2.0, 0.0, 0.0, 0.0, 0.3 }, 200);
+  for (int i = 0; i < 60; i++)
+    pf.predict_odometry(OdomMotion{ 0.0, 0.0, 0.0, 0.0 }, OdomNoise{});
+  Spread s = spread_of(pf);
+  EXPECT_NEAR(s.mx, 1.0, 1e-9);
+  EXPECT_NEAR(s.my, 2.0, 1e-9);
+  EXPECT_NEAR(s.myaw, 0.3, 1e-9);
+  EXPECT_LT(s.sx + s.sy + s.syaw, 1e-9);
+}
+
+TEST(OdomMotionModel, MovesAlongEachParticleHeadingWithEmclSpread)
+{
+  OdomNoise noise;
+  noise.ff = 0.04, noise.fr = 0.0, noise.fl = 0.001, noise.rf = 0.0004, noise.rr = 0.004;
+  ParticleFilter pf = at(Pose6{ 0.0, 0.0, 0.0, 0.0, 0.0, M_PI / 2 });  // +y を向いた粒子
+  pf.predict_odometry(OdomMotion{ 1.0, 0.1, 0.0, 0.0 }, noise);
+  Spread s = spread_of(pf);
+  EXPECT_NEAR(s.mx, 0.0, 0.01);
+  EXPECT_NEAR(s.my, 1.0, 0.02);
+  EXPECT_NEAR(s.myaw, M_PI / 2 + 0.1, 0.005);
+  EXPECT_NEAR(s.sy, std::sqrt(0.04), 0.02);  // 進行方向
+  EXPECT_NEAR(s.syaw, std::sqrt(0.0004 + 0.004 * 0.1), 0.002);
+}
+
+TEST(OdomMotionModel, BackwardMotionAndSlopeTilt)
+{
+  OdomNoise noise;
+  noise.ff = noise.fr = noise.fl = noise.rf = noise.rr = noise.vertical = noise.tilt = 0.0;
+  ParticleFilter pf = at(Pose6{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 }, 10);
+  pf.predict_odometry(OdomMotion{ -0.5, 0.0, 0.0, 0.05 }, noise);
+  Spread s = spread_of(pf);
+  EXPECT_NEAR(s.mx, -0.5, 1e-9);
+  EXPECT_NEAR(s.mpitch, 0.05, 1e-9);
+}
+
+TEST(OdomMotionModel, UpdateIsSkippedWhileStationary)
+{
+  using rsf_3d_localization::odom_update_due;
+  using rsf_3d_localization::OdomUpdateRule;
+  OdomUpdateRule rule{ 0.25, 0.2, 1.0, 0.02, 0.01 };
+  EXPECT_TRUE(odom_update_due(OdomMotion{ 0.25, 0.0, 0.0, 0.0 }, 0.3, rule));
+  EXPECT_TRUE(odom_update_due(OdomMotion{ -0.3, 0.0, 0.0, 0.0 }, 0.3, rule));
+  EXPECT_TRUE(odom_update_due(OdomMotion{ 0.0, -0.2, 0.0, 0.0 }, 0.3, rule));
+  EXPECT_FALSE(odom_update_due(OdomMotion{ 0.1, 0.05, 0.0, 0.0 }, 0.5, rule));
+  // ゆっくり動いているときは時間でも更新する
+  EXPECT_TRUE(odom_update_due(OdomMotion{ 0.03, 0.0, 0.0, 0.0 }, 1.0, rule));
+  EXPECT_TRUE(odom_update_due(OdomMotion{ 0.0, 0.012, 0.0, 0.0 }, 1.5, rule));
+  // 止まっている間 (車輪の数 mm とジャイロの雑音だけ) は何秒経っても更新しない
+  EXPECT_FALSE(odom_update_due(OdomMotion{ 0.005, 0.004, 0.0, 0.0 }, 1.0, rule));
+  EXPECT_FALSE(odom_update_due(OdomMotion{ 0.0, 0.0, 0.0, 0.0 }, 60.0, rule));
 }

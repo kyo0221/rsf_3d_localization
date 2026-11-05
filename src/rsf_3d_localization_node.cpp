@@ -161,6 +161,13 @@ void Rsf3dLocalization::init_particle_param()
   params_.motion.tilt = this->declare_parameter<double>("motion_tilt");
   params_.motion.xy_floor = this->declare_parameter<double>("motion_xy_floor");
   params_.motion.yaw_floor = this->declare_parameter<double>("motion_yaw_floor");
+  params_.odom_noise.ff = this->declare_parameter<double>("odom_noise_ff");
+  params_.odom_noise.fr = this->declare_parameter<double>("odom_noise_fr");
+  params_.odom_noise.fl = this->declare_parameter<double>("odom_noise_fl");
+  params_.odom_noise.rf = this->declare_parameter<double>("odom_noise_rf");
+  params_.odom_noise.rr = this->declare_parameter<double>("odom_noise_rr");
+  params_.odom_noise.vertical = this->declare_parameter<double>("odom_noise_vertical");
+  params_.odom_noise.tilt = this->declare_parameter<double>("odom_noise_tilt");
   params_.scan.sigma = this->declare_parameter<double>("scan_sigma");
   params_.scan.random_ratio = this->declare_parameter<double>("scan_random_ratio");
   params_.scan.effective_points = this->declare_parameter<double>("scan_effective_points");
@@ -183,6 +190,8 @@ void Rsf3dLocalization::init_filter_param()
   params_.update_min_d = this->declare_parameter<double>("update_min_d");
   params_.update_min_a = this->declare_parameter<double>("update_min_a");
   params_.update_max_dt = this->declare_parameter<double>("update_max_dt");
+  params_.update_still_d = this->declare_parameter<double>("update_still_d");
+  params_.update_still_a = this->declare_parameter<double>("update_still_a");
   params_.alpha_threshold = this->declare_parameter<double>("alpha_threshold");
   params_.pose_gate = this->declare_parameter<double>("pose_gate");
   params_.information_min_gain = this->declare_parameter<double>("information_min_gain");
@@ -375,6 +384,10 @@ void Rsf3dLocalization::on_wheel(const nav_msgs::msg::Odometry::SharedPtr msg)
   while (wheel_speeds_.size() > 50)
     wheel_speeds_.pop_front();
   wheel_received_ = this->now().seconds();
+  double stamp = stamp_of(msg->header.stamp), dt = stamp - wheel_stamp_;
+  if (wheel_stamp_ >= 0.0 && dt > 0.0 && dt < 0.5)
+    wheel_distance_ += speed * dt;
+  wheel_stamp_ = stamp;
 }
 
 void Rsf3dLocalization::on_initial_pose(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg)
@@ -598,9 +611,9 @@ bool Rsf3dLocalization::initialize(double t)
   filter_time_ = t;
   position_history_.clear();
   last_update_time_ = t;
-  last_update_pose_ = eskf_.pose();
   shadow_ = eskf_.pose();
   particle_shadow_ = shadow_;
+  wheel_distance_ = 0.0;
   rejects_ = low_streak_ = gnss_rejects_ = fix_misses_ = wheel_rejects_ = 0;
   has_output_ = false;
   initialized_ = true;
@@ -784,14 +797,19 @@ void Rsf3dLocalization::update_from_particles(const ParticleEstimate& estimate, 
 
 void Rsf3dLocalization::update_particles(double t)
 {
-  Transform current = eskf_.pose();
-  if (!update_due(to_pose(compose(inverse(last_update_pose_), current)), t - last_update_time_))
+  // 並進は車輪, 回転 (yaw, 坂での roll, pitch) は IMU だけで積分した shadow_ の差 (ジャイロ) から
+  Pose6 turned = to_pose(compose(inverse(particle_shadow_), shadow_));
+  OdomMotion motion{ wheel_fresh() ? wheel_distance_ : turned.x, turned.yaw, turned.roll, turned.pitch };
+  OdomUpdateRule rule{ params_.update_min_d, params_.update_min_a, params_.update_max_dt, params_.update_still_d,
+                       params_.update_still_a };
+  if (!odom_update_due(motion, t - last_update_time_, rule))
     return;
   std::vector<Point3f> scan = build_scan(shadow_);
   if (scan.empty())
     return;
-  particles_.predict(compose(inverse(particle_shadow_), shadow_), t - last_update_time_, params_.motion);
+  particles_.predict_odometry(motion, params_.odom_noise);
   particle_shadow_ = shadow_;
+  wheel_distance_ = 0.0;
   std::vector<double> prior_weights = particles_.weights();
   particles_.weight_scan(field_, scan, params_.scan);
   weight_gnss();
@@ -801,7 +819,6 @@ void Rsf3dLocalization::update_particles(double t)
   double alpha = particles_.score(field_, scan, estimate.pose, params_.scan.sigma);
   update_from_particles(estimate, prior, alpha);
   last_update_time_ = t;
-  last_update_pose_ = eskf_.pose();
   publish_particles(rclcpp::Time(static_cast<int64_t>(t * 1e9), this->get_clock()->get_clock_type()));
 }
 
