@@ -28,7 +28,7 @@ struct EskfNoise
   double gyro = 0.01;
   double gyro_bias = 1e-4;
   double acc_bias = 1e-3;
-  double odom_scale = 0.002;
+  double wheel_scale = 0.002;
 };
 
 class Eskf
@@ -39,15 +39,14 @@ public:
 
   void reset(const Transform& pose, double speed);
   void predict(const Eigen::Vector3d& gyro, const Eigen::Vector3d& acc, double dt, const EskfNoise& noise);
-  double update_forward_speed(double speed, double sigma, double gate);
+  double update_forward_speed(double speed, double sigma, double gate, bool inflate);
   void update_lateral_constraint(double sigma);
-  double update_position(const Eigen::Vector3d& measured, const Eigen::Vector3d& lever, double sigma_xy,
-                         double sigma_z, double gate, bool inflate);
+  double update_position(const Eigen::Vector3d& measured, const Eigen::Vector3d& lever, double sigma_xy, double sigma_z,
+                         double gate, bool inflate);
   double update_pose(const Transform& measured, const Eigen::Matrix<double, 6, 1>& sigma, double gate, bool inflate);
 
   Transform pose() const;
   double forward_speed() const;
-  double position_variance() const;
 
 private:
   Eigen::Vector3d p_ = Eigen::Vector3d::Zero();
@@ -55,7 +54,7 @@ private:
   Eigen::Matrix3d r_ = Eigen::Matrix3d::Identity();
   Eigen::Vector3d gyro_bias_ = Eigen::Vector3d::Zero();
   Eigen::Vector3d acc_bias_ = Eigen::Vector3d::Zero();
-  double odom_scale_ = 1.0;
+  double wheel_scale_ = 1.0;
   Cov cov_ = Cov::Identity();
 
   template <int M>

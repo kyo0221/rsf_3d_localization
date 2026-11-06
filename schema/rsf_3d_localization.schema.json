@@ -26,55 +26,28 @@
           "description": "Robot base frame.",
           "default": "base_footprint"
         },
-        "map_resolution": {
+        "field_resolution": {
           "type": "number",
-          "description": "NDT voxel size [m].",
-          "default": 1.0
+          "description": "Cell size of the 3D distance field [m].",
+          "default": 0.2,
+          "minimum": 0.01
         },
-        "ndt_coarse_resolution": {
+        "field_max_distance": {
           "type": "number",
-          "description": "Voxel size of the coarse NDT stage [m].",
-          "default": 2.0
+          "description": "Distance at which the 3D distance field is truncated [m].",
+          "default": 1.0,
+          "minimum": 0.01
         },
-        "map_min_points": {
+        "field_threads": {
           "type": "integer",
-          "description": "Minimum points in an NDT voxel.",
-          "default": 6
+          "description": "Threads used to build the distance field.",
+          "default": 8,
+          "minimum": 1
         },
-        "map_eigen_ratio": {
+        "map_visualization_voxel_size": {
           "type": "number",
-          "description": "Minimum eigenvalue ratio of an NDT voxel covariance.",
-          "default": 0.01
-        },
-        "ndt_max_iterations": {
-          "type": "integer",
-          "description": "Maximum NDT iterations per stage.",
-          "default": 30
-        },
-        "ndt_epsilon": {
-          "type": "number",
-          "description": "NDT convergence threshold on the step.",
-          "default": 0.001
-        },
-        "grid_resolution": {
-          "type": "number",
-          "description": "Cell size of the 2D likelihood grid for the global search [m].",
-          "default": 0.25
-        },
-        "grid_band_min": {
-          "type": "number",
-          "description": "Lowest height above ground used in the 2D grid [m].",
+          "description": "Voxel size of the point cloud map published for visualization [m].",
           "default": 0.5
-        },
-        "grid_band_max": {
-          "type": "number",
-          "description": "Highest height above ground used in the 2D grid [m].",
-          "default": 3.0
-        },
-        "grid_sigma": {
-          "type": "number",
-          "description": "Distance scale of the 2D likelihood [m].",
-          "default": 0.3
         },
         "initial_pose_x": {
           "type": "number",
@@ -111,11 +84,6 @@
           "description": "Scan accumulation time [s].",
           "default": 1.0
         },
-        "map_visualization_voxel_size": {
-          "type": "number",
-          "description": "Voxel size of the point cloud map published for visualization [m].",
-          "default": 0.5
-        },
         "scan_voxel_size": {
           "type": "number",
           "description": "Scan downsampling voxel size [m].",
@@ -141,19 +109,38 @@
           "description": "Maximum time between scan updates [s].",
           "default": 1.0
         },
+        "update_still_d": {
+          "type": "number",
+          "description": "Below this wheel travel [m] (and update_still_a) the robot is treated as stationary and particles are not updated.",
+          "default": 0.02,
+          "minimum": 0.0
+        },
+        "update_still_a": {
+          "type": "number",
+          "description": "Below this gyro rotation [rad] (and update_still_d) the robot is treated as stationary.",
+          "default": 0.01,
+          "minimum": 0.0
+        },
         "alpha_threshold": {
           "type": "number",
-          "description": "Minimum mean NDT score per point to use a match.",
-          "default": 0.2
+          "description": "Minimum mean point likelihood at the estimate to update the ESKF.",
+          "default": 0.3
         },
-        "ndt_gate": {
+        "pose_gate": {
           "type": "number",
-          "description": "Mahalanobis gate of a scan match.",
-          "default": 40.0
+          "description": "NIS gate for the particle pose update of the ESKF.",
+          "default": 40.0,
+          "minimum": 0.0
         },
-        "ndt_sigma": {
+        "information_min_gain": {
+          "type": "number",
+          "description": "Minimum relative information a particle update must add on an axis to be passed to the ESKF.",
+          "default": 0.05,
+          "minimum": 0.0
+        },
+        "pose_sigma_floor": {
           "type": "array",
-          "description": "Standard deviations of a scan match (x, y, z [m], roll, pitch, yaw [rad]).",
+          "description": "Lower bound of the particle pose standard deviations (x, y, z [m], roll, pitch, yaw [rad]).",
           "default": [
             0.1,
             0.1,
@@ -166,30 +153,248 @@
             "type": "number"
           }
         },
-        "search_radius": {
-          "type": "number",
-          "description": "Minimum radius of the global search [m].",
-          "default": 10.0
+        "particle_count": {
+          "type": "integer",
+          "description": "Number of particles.",
+          "default": 1000,
+          "minimum": 1
         },
-        "search_yaw": {
-          "type": "number",
-          "description": "Yaw range of the global search [rad].",
-          "default": 0.35
+        "particle_threads": {
+          "type": "integer",
+          "description": "Threads used to weight particles.",
+          "default": 4,
+          "minimum": 1
         },
-        "search_step": {
-          "type": "number",
-          "description": "Position step of the global search [m].",
-          "default": 0.5
+        "initial_spread": {
+          "type": "array",
+          "description": "Particle spread at initialization (xy [m], z [m], roll and pitch [rad], yaw [rad]).",
+          "default": [
+            0.5,
+            0.1,
+            0.01,
+            0.05
+          ],
+          "items": {
+            "type": "number"
+          }
         },
-        "search_yaw_step": {
-          "type": "number",
-          "description": "Yaw step of the global search [rad].",
-          "default": 0.035
+        "gnss_initialize": {
+          "type": "boolean",
+          "description": "Initialize from the first RTK fix with particles spread over all headings instead of initial_pose_*.",
+          "default": true
         },
-        "search_ratio": {
+        "gnss_init_particle_count": {
+          "type": "integer",
+          "description": "Number of particles used while searching the initial heading.",
+          "default": 3000,
+          "minimum": 1
+        },
+        "gnss_init_concentration": {
           "type": "number",
-          "description": "Score ratio by which the best search peak must beat the runner-up.",
-          "default": 1.05
+          "description": "Weighted mean resultant length of particle yaw required to finish GNSS initialization.",
+          "default": 0.995,
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "gnss_init_min_updates": {
+          "type": "integer",
+          "description": "Minimum particle updates before GNSS initialization can finish.",
+          "default": 5,
+          "minimum": 1
+        },
+        "motion_along": {
+          "type": "number",
+          "description": "Along-track motion noise per travelled metre.",
+          "default": 0.1,
+          "minimum": 0.0
+        },
+        "motion_along_time": {
+          "type": "number",
+          "description": "Along-track motion noise per second [m/s].",
+          "default": 0.4,
+          "minimum": 0.0
+        },
+        "motion_lateral": {
+          "type": "number",
+          "description": "Lateral motion noise per travelled metre.",
+          "default": 0.05,
+          "minimum": 0.0
+        },
+        "motion_vertical": {
+          "type": "number",
+          "description": "Vertical motion noise per travelled metre.",
+          "default": 0.05,
+          "minimum": 0.0
+        },
+        "motion_yaw_per_d": {
+          "type": "number",
+          "description": "Yaw motion noise per travelled metre [rad/m].",
+          "default": 0.02,
+          "minimum": 0.0
+        },
+        "motion_yaw_per_a": {
+          "type": "number",
+          "description": "Yaw motion noise per turned radian.",
+          "default": 0.05,
+          "minimum": 0.0
+        },
+        "motion_tilt": {
+          "type": "number",
+          "description": "Roll and pitch noise per update [rad].",
+          "default": 0.003,
+          "minimum": 0.0
+        },
+        "motion_xy_floor": {
+          "type": "number",
+          "description": "Minimum horizontal motion noise per update [m].",
+          "default": 0.02,
+          "minimum": 0.0
+        },
+        "motion_yaw_floor": {
+          "type": "number",
+          "description": "Minimum yaw motion noise per update [rad].",
+          "default": 0.005,
+          "minimum": 0.0
+        },
+        "odom_noise_ff": {
+          "type": "number",
+          "description": "Along-track variance per wheel travel [m^2/m] after initialization.",
+          "default": 0.08,
+          "minimum": 0.0
+        },
+        "odom_noise_fr": {
+          "type": "number",
+          "description": "Along-track variance per gyro rotation [m^2/rad].",
+          "default": 0.001,
+          "minimum": 0.0
+        },
+        "odom_noise_fl": {
+          "type": "number",
+          "description": "Lateral variance per wheel travel [m^2/m].",
+          "default": 0.004,
+          "minimum": 0.0
+        },
+        "odom_noise_rf": {
+          "type": "number",
+          "description": "Yaw variance per wheel travel [rad^2/m].",
+          "default": 0.0004,
+          "minimum": 0.0
+        },
+        "odom_noise_rr": {
+          "type": "number",
+          "description": "Yaw variance per gyro rotation [rad^2/rad].",
+          "default": 0.001,
+          "minimum": 0.0
+        },
+        "odom_noise_vertical": {
+          "type": "number",
+          "description": "Vertical variance per wheel travel [m^2/m].",
+          "default": 0.0006,
+          "minimum": 0.0
+        },
+        "odom_noise_tilt": {
+          "type": "number",
+          "description": "Roll and pitch variance per wheel travel [rad^2/m].",
+          "default": 4e-05,
+          "minimum": 0.0
+        },
+        "scan_sigma": {
+          "type": "number",
+          "description": "Standard deviation of the point to map distance [m].",
+          "default": 0.2,
+          "minimum": 0.01
+        },
+        "scan_random_ratio": {
+          "type": "number",
+          "description": "Weight of the uniform term of the point likelihood.",
+          "default": 0.1,
+          "minimum": 0.0
+        },
+        "scan_effective_points": {
+          "type": "number",
+          "description": "Number of independent points a scan counts as.",
+          "default": 30.0,
+          "minimum": 0.0
+        },
+        "resample_ratio": {
+          "type": "number",
+          "description": "Resample when the effective sample size falls below this ratio of the particle count.",
+          "default": 0.5,
+          "minimum": 0.0
+        },
+        "cluster_radius": {
+          "type": "number",
+          "description": "Radius of the particle cluster used as the estimate [m].",
+          "default": 1.0,
+          "minimum": 0.01
+        },
+        "mass_threshold": {
+          "type": "number",
+          "description": "Minimum weight of the main cluster to update the ESKF.",
+          "default": 0.6,
+          "minimum": 0.0
+        },
+        "fix_reset_radius": {
+          "type": "number",
+          "description": "Radius around an RTK fix used to check the particles [m].",
+          "default": 1.0,
+          "minimum": 0.0
+        },
+        "fix_reset_mass": {
+          "type": "number",
+          "description": "Particle weight near the fix below which the fix counts as a miss.",
+          "default": 0.05,
+          "minimum": 0.0
+        },
+        "fix_reset_count": {
+          "type": "integer",
+          "description": "Consecutive fix misses before particles are added at the fix.",
+          "default": 2,
+          "minimum": 1
+        },
+        "fix_reset_ratio": {
+          "type": "number",
+          "description": "Ratio of particles replaced at the fix.",
+          "default": 0.3,
+          "minimum": 0.0
+        },
+        "fix_reset_spread": {
+          "type": "array",
+          "description": "Spread of particles added at the fix (xy [m], z [m], roll and pitch [rad], yaw [rad]).",
+          "default": [
+            0.3,
+            0.1,
+            0.01,
+            0.05
+          ],
+          "items": {
+            "type": "number"
+          }
+        },
+        "expand_count": {
+          "type": "integer",
+          "description": "Consecutive low map agreements before particles are spread.",
+          "default": 5,
+          "minimum": 1
+        },
+        "expand_ratio": {
+          "type": "number",
+          "description": "Ratio of particles replaced when spreading.",
+          "default": 0.5,
+          "minimum": 0.0
+        },
+        "expand_spread": {
+          "type": "array",
+          "description": "Spread of particles added around the ESKF pose (xy [m], z [m], roll and pitch [rad], yaw [rad]).",
+          "default": [
+            1.0,
+            0.2,
+            0.02,
+            0.15
+          ],
+          "items": {
+            "type": "number"
+          }
         },
         "imu_rotation": {
           "type": "array",
@@ -234,9 +439,9 @@
           "description": "Gyro bias random walk.",
           "default": 0.0001
         },
-        "sigma_odom_scale": {
+        "sigma_wheel_scale": {
           "type": "number",
-          "description": "Odometry speed scale random walk.",
+          "description": "Process noise of the wheel speed scale [1/sqrt(s)].",
           "default": 0.002
         },
         "lateral_sigma": {
@@ -244,45 +449,27 @@
           "description": "Standard deviation of the zero lateral and vertical body velocity constraint [m/s].",
           "default": 0.7
         },
-        "odom_speed_period": {
+        "wheel_speed_sigma": {
           "type": "number",
-          "description": "Interval between odometry speed updates [s].",
-          "default": 0.5
+          "description": "Standard deviation of the wheel forward speed [m/s].",
+          "default": 0.3,
+          "minimum": 0.001
         },
-        "odom_speed_window": {
+        "wheel_speed_gate": {
           "type": "number",
-          "description": "Time window of the odometry speed difference [s].",
-          "default": 0.5
-        },
-        "odom_speed_sigma": {
-          "type": "number",
-          "description": "Standard deviation of the odometry speed [m/s].",
-          "default": 0.8
-        },
-        "odom_speed_gate": {
-          "type": "number",
-          "description": "Mahalanobis gate of the odometry speed.",
+          "description": "Mahalanobis gate for wheel speed updates.",
           "default": 9.0
         },
-        "odom_max_speed": {
+        "wheel_max_speed": {
           "type": "number",
-          "description": "Odometry speeds above this are ignored [m/s].",
+          "description": "Wheel speeds above this are ignored [m/s].",
           "default": 2.2
         },
-        "odom_max_lateral_speed": {
+        "wheel_timeout": {
           "type": "number",
-          "description": "Odometry steps with more lateral speed are ignored [m/s].",
-          "default": 0.3
-        },
-        "restart_stop_s": {
-          "type": "number",
-          "description": "Stop duration after which a restart is detected [s].",
-          "default": 2.0
-        },
-        "restart_hold_s": {
-          "type": "number",
-          "description": "Time after a restart during which the odometry speed is ignored [s].",
-          "default": 5.0
+          "description": "Wheel speed is not used when no wheel odometry has been received for this long [s].",
+          "default": 0.5,
+          "minimum": 0.0
         },
         "gnss_origin_lat": {
           "type": "number",
@@ -342,6 +529,42 @@
           "type": "number",
           "description": "Mahalanobis gate of a fix.",
           "default": 30.0
+        },
+        "particle_fix_sigma_xy": {
+          "type": "number",
+          "description": "Horizontal standard deviation of an RTK fix for particle weights [m].",
+          "default": 0.15,
+          "minimum": 0.001
+        },
+        "particle_fix_sigma_z": {
+          "type": "number",
+          "description": "Vertical standard deviation of an RTK fix for particle weights [m].",
+          "default": 0.3,
+          "minimum": 0.001
+        },
+        "particle_fix_outlier": {
+          "type": "number",
+          "description": "Outlier ratio of an RTK fix for particle weights.",
+          "default": 0.02,
+          "minimum": 0.0
+        },
+        "particle_float_sigma_xy": {
+          "type": "number",
+          "description": "Horizontal standard deviation of a non-fix GNSS solution [m].",
+          "default": 3.0,
+          "minimum": 0.001
+        },
+        "particle_float_sigma_z": {
+          "type": "number",
+          "description": "Vertical standard deviation of a non-fix GNSS solution [m].",
+          "default": 10.0,
+          "minimum": 0.001
+        },
+        "particle_float_outlier": {
+          "type": "number",
+          "description": "Outlier ratio of a non-fix GNSS solution.",
+          "default": 0.3,
+          "minimum": 0.0
         },
         "output_rate_d": {
           "type": "number",
@@ -403,15 +626,15 @@
             "type": "number"
           }
         },
-        "publish_tf": {
-          "type": "boolean",
-          "description": "Broadcast the map to odom transform.",
-          "default": true
-        },
         "transform_tolerance": {
           "type": "number",
           "description": "Future dating of the published transform [s].",
           "default": 0.2
+        },
+        "publish_tf": {
+          "type": "boolean",
+          "description": "Broadcast the map to odom transform.",
+          "default": true
         },
         "tf_timeout": {
           "type": "number",
@@ -421,7 +644,7 @@
         "imu_wait": {
           "type": "number",
           "description": "Time a scan waits for the IMU to catch up before it is processed anyway [s].",
-          "default": 0.2
+          "default": 1.0
         }
       },
       "required": [
@@ -429,16 +652,10 @@
         "map_frame",
         "odom_frame",
         "base_frame",
-        "map_resolution",
-        "ndt_coarse_resolution",
-        "map_min_points",
-        "map_eigen_ratio",
-        "ndt_max_iterations",
-        "ndt_epsilon",
-        "grid_resolution",
-        "grid_band_min",
-        "grid_band_max",
-        "grid_sigma",
+        "field_resolution",
+        "field_max_distance",
+        "field_threads",
+        "map_visualization_voxel_size",
         "initial_pose_x",
         "initial_pose_y",
         "initial_pose_z",
@@ -446,36 +663,66 @@
         "range_min",
         "range_max",
         "scan_accumulate_s",
-        "map_visualization_voxel_size",
         "scan_voxel_size",
         "max_points",
         "update_min_d",
         "update_min_a",
         "update_max_dt",
+        "update_still_d",
+        "update_still_a",
         "alpha_threshold",
-        "ndt_gate",
-        "ndt_sigma",
-        "search_radius",
-        "search_yaw",
-        "search_step",
-        "search_yaw_step",
-        "search_ratio",
+        "pose_gate",
+        "information_min_gain",
+        "pose_sigma_floor",
+        "particle_count",
+        "particle_threads",
+        "initial_spread",
+        "gnss_initialize",
+        "gnss_init_particle_count",
+        "gnss_init_concentration",
+        "gnss_init_min_updates",
+        "motion_along",
+        "motion_along_time",
+        "motion_lateral",
+        "motion_vertical",
+        "motion_yaw_per_d",
+        "motion_yaw_per_a",
+        "motion_tilt",
+        "motion_xy_floor",
+        "motion_yaw_floor",
+        "odom_noise_ff",
+        "odom_noise_fr",
+        "odom_noise_fl",
+        "odom_noise_rf",
+        "odom_noise_rr",
+        "odom_noise_vertical",
+        "odom_noise_tilt",
+        "scan_sigma",
+        "scan_random_ratio",
+        "scan_effective_points",
+        "resample_ratio",
+        "cluster_radius",
+        "mass_threshold",
+        "fix_reset_radius",
+        "fix_reset_mass",
+        "fix_reset_count",
+        "fix_reset_ratio",
+        "fix_reset_spread",
+        "expand_count",
+        "expand_ratio",
+        "expand_spread",
         "imu_rotation",
         "imu_decimation",
         "sigma_acc",
         "sigma_gyro",
         "sigma_acc_bias",
         "sigma_gyro_bias",
-        "sigma_odom_scale",
+        "sigma_wheel_scale",
         "lateral_sigma",
-        "odom_speed_period",
-        "odom_speed_window",
-        "odom_speed_sigma",
-        "odom_speed_gate",
-        "odom_max_speed",
-        "odom_max_lateral_speed",
-        "restart_stop_s",
-        "restart_hold_s",
+        "wheel_speed_sigma",
+        "wheel_speed_gate",
+        "wheel_max_speed",
+        "wheel_timeout",
         "gnss_origin_lat",
         "gnss_origin_lon",
         "gnss_offset",
@@ -485,12 +732,18 @@
         "gnss_sigma_xy",
         "gnss_sigma_z",
         "gnss_gate",
+        "particle_fix_sigma_xy",
+        "particle_fix_sigma_z",
+        "particle_fix_outlier",
+        "particle_float_sigma_xy",
+        "particle_float_sigma_z",
+        "particle_float_outlier",
         "output_rate_d",
         "output_rate_a",
         "output_grade",
         "output_pose_covariance",
-        "publish_tf",
         "transform_tolerance",
+        "publish_tf",
         "tf_timeout",
         "imu_wait"
       ],

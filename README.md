@@ -1,6 +1,6 @@
 # rsf_3d_localization
 
-IMU・オドメトリ・RTK GNSS と 3D 点群地図 (PCD) への NDT マッチングを誤差状態カルマンフィルタで統合し、`map → odom` を推定する。
+IMU・車輪速度・RTK GNSS を誤差状態カルマンフィルタで統合し、3D 点群地図 (PCD) の距離場で重み付けした粒子フィルタの推定で補正して `map → odom` を推定する。
 
 ```bash
 colcon build --packages-select rsf_3d_localization

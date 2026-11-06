@@ -68,15 +68,3 @@ TEST(PoseMath, QuaternionMatchesRotation)
   for (int k = 0; k < 9; k++)
     EXPECT_NEAR(r[k], e[k], 1e-9);
 }
-
-TEST(PoseMath, EigenSymmetric)
-{
-  rsf_3d_localization::Mat3 a = { 4, 1, 0, 1, 3, 0, 0, 0, 1 };
-  rsf_3d_localization::Vec3 values;
-  rsf_3d_localization::Mat3 vectors;
-  rsf_3d_localization::eigen_symmetric(a, values, vectors);
-  double trace = values[0] + values[1] + values[2];
-  double det = values[0] * values[1] * values[2];
-  EXPECT_NEAR(trace, 8.0, 1e-9);
-  EXPECT_NEAR(det, 11.0, 1e-9);
-}

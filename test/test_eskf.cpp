@@ -63,6 +63,6 @@ TEST(Eskf, SpeedUpdateSetsVelocity)
   Eskf eskf;
   eskf.reset(to_transform(Pose6{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 }), 0.0);
   for (int i = 0; i < 50; i++)
-    eskf.update_forward_speed(1.0, 0.1, 0.0);
+    eskf.update_forward_speed(1.0, 0.1, 0.0, false);
   EXPECT_NEAR(eskf.forward_speed(), 1.0, 0.1);
 }

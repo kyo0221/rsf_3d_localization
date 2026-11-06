@@ -5,6 +5,7 @@
   <arg name="input_pointcloud" default="/rsf/hokuyo_cloud2"/>
   <arg name="input_imu" default="/rsf/imu"/>
   <arg name="input_gnss" default="/rsf/nav_sat_fix"/>
+  <arg name="input_wheel_odom" default="/icart/odom"/>
   <arg name="odom_frame" default="rsf_odom"/>
 
   <node pkg="rsf_3d_localization" exec="rsf_3d_localization_node" name="rsf_3d_localization" output="screen">
@@ -15,6 +16,7 @@
     <remap from="~/input/pointcloud" to="$(var input_pointcloud)"/>
     <remap from="~/input/imu" to="$(var input_imu)"/>
     <remap from="~/input/gnss" to="$(var input_gnss)"/>
+    <remap from="~/input/wheel_odom" to="$(var input_wheel_odom)"/>
     <remap from="~/input/initialpose" to="/initialpose"/>
     <remap from="~/output/pose_with_covariance" to="/rsf_3d_localization/pose_with_covariance"/>
     <remap from="~/output/pointcloud_map" to="/rsf_3d_localization/pointcloud_map"/>
